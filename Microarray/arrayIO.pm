@@ -2,23 +2,11 @@
 # by Chaolin Zhang
 #
 # IO manipulation of microarray data
-
 #!/usr/bin/perl -w
 package arrayIO;
 
 use strict;
 use FileHandle;
-
-=head1 NAME
-arrayIO - subroutines to manipulate microarray data input and output
-
-=head1 AUTHOR
-
-Chaolin Zhang (zhangc@cshl.edu)
-
-create on Nov 22, 2004
-=cut
-
 
 
 #@readArray@
@@ -68,6 +56,14 @@ sub readArray
 		chomp $line;
 		my @tmp = split ("\t", $line);
 		$geneName[$geneN] = shift @tmp;
+		while (@tmp < $arrayN)
+		{
+			push @tmp, "";
+		}
+		if (@tmp != $arrayN)
+		{
+			die "line number: $geneN, arrayNum=$arrayN, column number in this line:", $#tmp+1, "\n";
+		}
 		$data->[$geneN] = \@tmp;
 		$geneN++;
 	}		
@@ -123,29 +119,43 @@ sub writeArray
 	#output array names
 	print $fd "ProbeID";
 	my ($g, $a);
+	#print "OK1\n";
 	for ($a = 0; $a < $array->{"arrayN"}; $a++)
 	{
 		print $fd "\t", $array->{"arrayName"}->[$a];
 	}	
 	print $fd "\n";
 	
+	#print "OK2\n";
 	#output data
 	for ($g = 0; $g < $array->{"geneN"}; $g++)
 	{
 		print $fd $array->{"geneName"}->[$g];
 		for ($a = 0; $a < $array->{"arrayN"}; $a++)
 		{
-			print $fd "\t", $array->{"data"}->[$g]->[$a];
+				#print "g = $g, a = $a\n";
+			if (defined $array->{"data"}->[$g]->[$a] && $array->{"data"}->[$g]->[$a] ne '')
+			{
+				print $fd "\t", $array->{"data"}->[$g]->[$a];
+			}
+			else
+			{
+				print $fd "\t", "NA";
+			}
 		}
 		print $fd "\n";
 	}	
 	close ($fd);
 	return if ($outCls == 0);
 	
-	warn "writeArray: warining: failed to output class information\n" if ($array->{"hasCls"} == 0);
+	if ($array->{"hasCls"} == 0)
+	{
+		warn "writeArray: warining: failed to output class information\n";
+		return;
+	}	
 	
 	open ($fd, ">$clsFile") || die "Failed to write data to $clsFile\n";
-	
+	#print "OK3\n";
 	for ($a = 0; $a < $array->{"arrayN"}; $a++)
 	{
 		print $fd $array->{"cls"}->[$a], "\n";

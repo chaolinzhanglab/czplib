@@ -140,7 +140,7 @@ sub delArray
 	
 	$arrayIdx = Common::diffArray (\@arrayIdxAll, $arrayIdx);
 	
-	my @geneIdx = (0..($array->{"geneN"} - 1));
+	my @geneIdx = (0..($array->{"arrayN"} - 1));
 	my $arrayNew = subArrayMat ($array, $arrayIdx, \@geneIdx);
 	return $arrayNew; 
 }	

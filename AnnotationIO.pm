@@ -25,6 +25,7 @@ sub readBedFile
 	my $in = $_[0];
 	my $out = [];
 	my $fd = new FileHandle;
+	
 	open ($fd, "<$in")||Carp::croak "can not open file $in to read\n";
 	my $line;
 	while ($line = <$fd>)
@@ -43,6 +44,23 @@ sub readBedFile
 			last if ($#cols < $i);
 			$entry->{$colNames[$i]} = $cols[$i];
 		}
+
+		if (exists $entry->{"blockSizes"})
+		{
+			my $blockSizes = $entry->{"blockSizes"};
+			my @bs = split (/\,/, $blockSizes);
+			Carp::croak "in correct number of blocks at line $line\n" if $#bs != $entry->{"blockCount"} - 1;
+			$entry->{"blockSizes"} = \@bs;
+		}
+
+		if (exists $entry->{"blockStarts"})
+		{
+			my $blockStarts = $entry->{"blockStarts"};
+			my @bs = split (/\,/, $blockStarts);
+			Carp::croak "in correct number of blocks at line $line\n" if $#bs != $entry->{"blockCount"} - 1;
+			$entry->{"blockStarts"} = \@bs;
+		}
+		
 		$entry->{"chromEnd"} -= 1;
 		Carp::croak "chromStart (" . $entry->{"chromStart"} . ")  > chromEnd (" . $entry->{"chromEnd"} . ")\n" 
 		if ($entry->{"chromStart"} > $entry->{"chromEnd"});
@@ -54,6 +72,117 @@ sub readBedFile
 	return $out;
 }
 
+
+sub readPslFile
+{
+	my $in = $_[0];
+	
+	my $fin = new FileHandle;
+	my @results;
+	open ($fin, "<$in") || Carp::croak "can not open file $in to read\n";
+	
+	my $line = <$fin>;
+	if ($line=~/^psLayout/)	# there is a header
+	{
+		while ($line = <$fin>)
+		{
+			chomp $line;
+			last if ($line =~/^\-\-\-/);
+		}
+	}
+	else
+	{
+		seek ($fin, 0, 0); # no header line, go to the very beginnning
+	}
+
+	#now ready to go
+	
+	while ($line =<$fin>)
+	{
+		chomp $line;
+		next if $line =~/^\s*$/;
+		
+		my @cols = split (/\t/, $line);
+		#print join ("|\n", @cols), "|\n";
+		Carp::croak ("the number of columns is incorrect\n") if $#cols != 20;
+		
+		my @blockSizes = split (/\,/, $cols[18]); #pop @blockSizes;
+		my @qStarts = split (/\,/, $cols[19]); #pop @qStarts;
+		#print "qStarts=", join ("|\t|", @qStarts), "|\n";
+		my @tStarts = split (/\,/, $cols[20]); #pop @tStarts;
+		push @results, {
+				matches=>$cols[0],
+				misMatches=>$cols[1],
+				repMatches=>$cols[2],
+				nCount=>$cols[3],
+				qNumInsert=>$cols[4],
+				qBaseInsert=>$cols[5],
+				tNumInsert=>$cols[6],
+				tBaseInsert=>$cols[7],
+				strand=>$cols[8], 
+				qName=>$cols[9],
+				qSize=>$cols[10],
+				qStart=>$cols[11],	#the convention is the same as BED file, 0 to len
+				qEnd=>$cols[12] - 1,
+				tName=>$cols[13],
+				tSize=>$cols[14],
+				tStart=>$cols[15],
+				tEnd=>$cols[16] - 1,
+				blockCount=>$cols[17],
+				blockSizes=>\@blockSizes,
+				qStarts=> \@qStarts, 
+				tStarts=>\@tStarts};
+	}
+	close ($fin);
+	return \@results;
+}
+
+sub writePslFile
+{
+	my ($aligns, $out) = @_;
+	my $printHeader = 0;
+
+	$printHeader = 1 if (@_ == 3 && $_[2] == 1);
+	
+	my $header = "psLayout version 3\n";
+	$header .= "match	mis- 	rep. 	N's	Q gap	Q gap	T gap	T gap	strand	Q        	Q   	Q    	Q  	T        	T   	T    	T  	block	blockSizes 	qStarts	 tStarts\n";
+	$header .= "     	match	match	   	count	bases	count	bases	      	name     	size	start	end	name     	size	start	end	count\n";
+	$header .= "---------------------------------------------------------------------------------------------------------------------------------------------------------------\n";
+	my $fout = new FileHandle;
+
+	open ($fout, ">$out") || Carp::croak "can not open file $out to write\n";
+	
+	print $fout $header if $printHeader;
+	
+	foreach my $align (@$aligns)
+	{	
+		print $fout join ("\t",
+			$align->{"matches"},
+			$align->{"misMatches"},
+			$align->{"repMatches"},
+			$align->{"nCount"},
+			$align->{"qNumInsert"},
+			$align->{"qBaseInsert"},
+			$align->{"tNumInsert"},
+			$align->{"tBaseInsert"},
+			$align->{"strand"},
+			$align->{"qName"},
+			$align->{"qSize"},
+			$align->{"qStart"},
+			$align->{"qEnd"} + 1,
+			$align->{"tName"}, #tName
+			$align->{"tSize"},
+			$align->{"tStart"},#tStart
+			$align->{"tEnd"} + 1, #tEnd
+			$align->{"blockCount"},
+			join (",", @{$align->{"blockSizes"}}) . ",", #blockSizes
+			join (",", @{$align->{"qStarts"}}) . ",", #qStarts
+			join (",", @{$align->{"tStarts"}}) . ","),  #tStarts
+			"\n";
+	}
+}
+
+
 sub writeBedFile
 {
 	
@@ -62,7 +191,7 @@ sub writeBedFile
 	open ($fout, ">$out") || Carp::croak "can not open file $out to write\n";
 	my $stdout = select ($fout);
 	my @colNames = qw (chrom chromStart chromEnd name score strand thickStart thickEnd itemRgb blockCount blockSizes blockStarts);
-		
+	
 	if (@$regions <1)
 	{
 		select ($stdout);
@@ -82,14 +211,24 @@ sub writeBedFile
 	
 	foreach my $r (@$regions)
 	{
+		my %rCopy = %$r;
+		if (exists $rCopy{'blockCount'})
+		{
+			Carp::croak "no blockSizes\n" unless exists $rCopy {'blockSizes'};
+			Carp::croak "no blockStarts\n" unless exists $rCopy {'blockStarts'};
+			
+			$rCopy{'blockSizes'} = join (",", @{$rCopy{'blockSizes'}});
+			$rCopy{'blockStarts'} = join (",", @{$rCopy{'blockStarts'}});
+		}
+		
 		#print STDOUT Dumper ($r), "\n";
-		print join ("\t", $r->{"chrom"}, $r->{"chromStart"}, $r->{"chromEnd"} + 1);
+		print join ("\t", $rCopy{"chrom"}, $rCopy{"chromStart"}, $rCopy{"chromEnd"} + 1);
 		for (my $i = 3; $i < $colNum; $i++)
 		{
 			my $col = $colNames[$i];
-			if (exists $r->{$col} && $r->{$col} ne '')
+			if (exists $rCopy{$col} && $rCopy{$col} ne '')
 			{
-				print "\t", $r->{$col};
+				print "\t", $rCopy{$col};
 			}
 			else
 			{
@@ -99,6 +238,24 @@ sub writeBedFile
 		print "\n";
 	}
 	close ($fout);
+}
+
+
+sub readSgrFile
+{
+	my $in = $_[0];
+	my $fin = new FileHandle;
+	my @ret;
+	open ($fin, "<$in") || Carp::croak "can not open file $in to read\n";
+	while (my $line =<$fin>)
+	{
+		chomp $line;
+		next if $line=~/^\s*$/;
+		my ($chr, $pos, $score) = split ("\t", $line);
+		push @ret, {chrom=>$chr, pos=>$pos, score=>$score};
+	}
+	close ($fin);
+	return \@ret;
 }
 
 =head2 readMotifFile
@@ -361,11 +518,26 @@ sub printMotif
 	{
 		my $pos = $motif->{"MT"}->[$i];
 		printf ("%02d\t", $i+1);
-		print join ("\t", 
+		my $temp = $motif->{"MT"}->[0]->{"A"} 
+			+ $motif->{"MT"}->[0]->{"C"}
+			+ $motif->{"MT"}->[0]->{"G"}
+			+ $motif->{"MT"}->[0]->{"T"};
+		if (Common::ABS ($temp - int($temp + 0.5)) < 1e02 && $temp > 2)
+		{	
+			print join ("\t", 
 				sprintf ("%4d", $pos->{"A"}), 
 				sprintf ("%4d", $pos->{"C"}), 
 				sprintf ("%4d", $pos->{"G"}), 
 				sprintf ("%4d", $pos->{"T"})), "\n";
+		}
+		else
+		{
+			print join ("\t", 
+				sprintf ("%.4f", $pos->{"A"}), 
+				sprintf ("%.4f", $pos->{"C"}), 
+				sprintf ("%.4f", $pos->{"G"}), 
+				sprintf ("%.4f", $pos->{"T"})), "\n";
+		}
 	}
 	print "XX\n";
 

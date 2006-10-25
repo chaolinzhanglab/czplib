@@ -7,6 +7,7 @@
 package Common;
 use strict;
 use Carp;
+use AnnotationIO;
 
 =head1 NAME
 
@@ -20,6 +21,44 @@ Aug, 2005
 
 =cut
 
+
+use Cwd;
+sub getFullPath
+{
+	my $path = $_[0];
+	return $path if $path=~/^\//;
+	my $pwd = cwd ();
+	return "$pwd/$path";
+}
+
+
+sub ls
+{
+	Carp::croak "need one or two arguments (dir, suffix)\n" if @_ != 1 && @_ != 2;
+	my $dir = $_[0];
+	my $suffix = $_[1] if @_ > 1;
+	
+	Carp::croak "$dir does not exists\n" unless -d $dir;
+
+	opendir (DIR, "$dir") || Carp::croak "can not open $dir to read\n";
+	my @files;
+
+	while (my $f = readdir(DIR))
+	{
+		next if $f eq '.';
+		next if $f eq '..';
+
+		if ($suffix)
+		{
+			next unless $f=~/\.$suffix$/;
+		}
+		push @files, $f;
+	}
+	close (DIR);
+	return \@files;
+}
+
+#//////////////////////////Array Manipulation/////////////////////////
 sub bootstrapArray
 {
 	my $arrayRef = $_[0];
@@ -102,6 +141,39 @@ sub locateArrayElem
 	return -1;
 }	
 
+#randomly shuffle an array
+sub shuffleArray
+{
+	die "shuffleArray: incorrect number of paramters.\n" if @_!= 1;
+	my $array = $_[0];
+	my $len = @$array;
+	
+	my $randIdx = randSeq (0, $len);
+	my @randIdx = @$randIdx;
+	my @arrayNew = @$array;
+	@arrayNew = @arrayNew[@randIdx];
+	return (\@arrayNew);
+}	
+
+# generate a random sequence from $start to $start +$len -1
+sub randSeq
+{
+	die "randSeq: incorrect number of paramters.\n" if @_!= 2;
+	my ($start, $len) = @_;
+	my %randHash;
+	my $i;
+	for ($i = $start; $i < $len + $start; $i++)
+	{
+		$randHash{$i} = rand (1);
+	}	  
+	my @ret = sort{$randHash{$b} <=> $randHash{$a}} keys %randHash; 
+	#print join ("\t", @ret), "\n";
+	return (\@ret);
+}
+
+
+
+#/////////////////////////////Math//////////////////////////////////
 # pow
 sub pow
 {
@@ -124,6 +196,29 @@ sub norm
 	}
 	$sum = sqrt ($sum);
 	return $sum;
+}
+
+
+sub max
+{
+	my @array = @_;
+	my $m = $array[0];
+	foreach my $elem (@array)
+	{
+		$m = ($elem > $m)? $elem : $m;
+	}
+	return $m;
+}
+
+sub min
+{
+	my @array = @_;
+	my $m = $array[0];
+	foreach my $elem (@array)
+	{
+		$m = ($elem < $m)? $elem : $m;
+	}
+	return $m;
 }
 
 
@@ -215,37 +310,7 @@ sub enumerateKofN
 	return $array;
 }
 
-#randomly shuffle an array
-sub shuffleArray
-{
-	die "shuffleArray: incorrect number of paramters.\n" if @_!= 1;
-	my $array = $_[0];
-	my $len = @$array;
-	
-	my $randIdx = randSeq (0, $len);
-	my @randIdx = @$randIdx;
-	my @arrayNew = @$array;
-	@arrayNew = @arrayNew[@randIdx];
-	return (\@arrayNew);
-}	
-
-# generate a random sequence from $start to $start +$len -1
-sub randSeq
-{
-	die "randSeq: incorrect number of paramters.\n" if @_!= 2;
-	my ($start, $len) = @_;
-	my %randHash;
-	my $i;
-	for ($i = $start; $i < $len + $start; $i++)
-	{
-		$randHash{$i} = rand (1);
-	}	  
-	my @ret = sort{$randHash{$b} <=> $randHash{$a}} keys %randHash; 
-	#print join ("\t", @ret), "\n";
-	return (\@ret);
-}
-
-
+#/////////////////////////Clustering////////////////////////////////
 sub matrix2clusters
 {
 	my $matrix = $_[0];
@@ -285,15 +350,7 @@ sub _addNeighbor
 	}
 }
 
-use Cwd;
-sub getFullPath
-{
-	my $path = $_[0];
-	return $path if $path=~/^\//;
-	my $pwd = cwd ();
-	return "$pwd/$path";
-}
-
+#///////////////////////Sequence manipulation//////////////////////////
 #reverse complementary nucleotide sequence
 sub revcom
 {
@@ -303,6 +360,9 @@ sub revcom
 }
 
 #contig coordinates to genome coordinates
+#$contig->{chrom=>chr1, chromStart=>2, chromEnd=>3, strand=>4}
+#$zero based coordinates
+#
 sub contig2genome
 {
 	my ($contig, $start, $end) = @_;
@@ -326,6 +386,177 @@ sub contig2genome
 			strand=>$contigStrand, 
 			chromStart=>$genomeStart, 
 			chromEnd=>$genomeEnd};
+}
+
+sub baseComp
+{
+	my $seqs = $_[0];
+	my ($a, $c, $g, $t) = (0, 0, 0, 0);
+	foreach my $seqStr (@$seqs)
+	{
+		my $a2 = ($seqStr=~tr/aA//);
+		my $c2 = ($seqStr=~tr/cC//);
+		my $g2 = ($seqStr=~tr/gG//);
+		my $t2 = ($seqStr=~tr/tTuU//);
+		$a += $a2;
+		$c += $c2;
+		$g += $g2;
+		$t += $t2;
+	}
+	my $n = $a + $c +$g + $t;
+	$a /= $n;
+	$c /= $n;
+	$g /= $n;
+	$t /= $n;
+	return {A=>$a, C=>$c, G=>$g, T=>$t, N=>$n};
+}
+
+sub blat
+{
+	Carp::croak "three or four arguments expected\n" unless (@_ >= 3 && @_ <= 4);
+	
+	my ($blat, $db, $query) = @_;
+	
+	my $cache = "/tmp";
+	$cache = $_[3] if (@_ == 4 && (-d $_[3]));
+	
+	my $out = "$cache/blatout.".time ().rand();
+	Carp::croak "the output $out already exists\n" if -f $out;
+	
+	system ("$blat $db $query $out");
+	my $result = AnnotationIO::readPslFile ($out);
+	unlink $out if -f $out;
+	return $result;
+}
+
+#Convert count matrix to stormo matrix
+#see AnnotationIO for the data structure of matrix
+#
+#status: tested
+#Date: 09/29/2006
+#
+sub ToStormoMatrix
+{
+	my ($matrix, $baseComp) = @_;
+	my @bases = ('A', 'C', 'G', 'T');
+	
+	my $width = @$matrix;
+	my $nseq = $matrix->[0]->{'A'} + $matrix->[0]->{'C'} + $matrix->[0]->{'G'} + $matrix->[0]->{'T'};
+	$nseq = int ($nseq + 0.5);
+	my $tmp = $baseComp->{'A'} + $baseComp->{'C'} + $baseComp->{'G'} + $baseComp->{'T'};
+	Carp::croak "incorrect base composition? sum=$tmp\n" if (ABS ($tmp - 1) > 1e-2);
+	Carp::croak "number of sequences is $nseq, unlikely a count matrix\n" if ($nseq < 2);
+	
+	for (my $p = 0; $p < $width; $p++)
+	{
+		#every position may have a different number of sequences
+		my $nseq = $matrix->[$p]->{'A'} + $matrix->[$p]->{'C'} + $matrix->[$p]->{'G'} + $matrix->[$p]->{'T'};
+		foreach my $b (@bases)
+		{
+			Croak::carp ("negative matrix elements (p=$p, base=$b, value=" . $matrix->[$p]->{$b} . ")\n") if $matrix->[$p]->{$b} < 0;
+			$matrix->[$p]->{$b} = log (($matrix->[$p]->{$b} + $baseComp->{$b})/($nseq+1)/$baseComp->{$b})/log(2);
+		}
+	}
+	return $matrix;
+}
+
+#status: tested
+#Date: 09/29/2006
+#
+sub getMaxMatrixScore
+{
+	my $matrix = $_[0];
+	my $width = @$matrix;
+	my $score = 0;
+	for (my $p = 0; $p < $width; $p++)
+	{
+		$score += max ($matrix->[$p]->{'A'}, $matrix->[$p]->{'C'}, $matrix->[$p]->{'G'}, $matrix->[$p]->{'T'});
+	}
+	return $score;
+}
+
+#status: tested
+#Date: 09/29/2006
+#
+sub getMinMatrixScore
+{
+	my $matrix = $_[0];
+	my $width = @$matrix;
+	my $score = 0;
+	for (my $p = 0; $p < $width; $p++)
+	{
+		$score += min ($matrix->[$p]->{'A'}, $matrix->[$p]->{'C'}, $matrix->[$p]->{'G'}, $matrix->[$p]->{'T'});
+	}
+	return $score;
+}
+
+#status: tested
+#Date: 09/29/2006
+sub getMatrixScore
+{
+	my ($matrix, $site) = @_;
+	my $width = @$matrix;
+	Carp::croak "incorrect site length (site=$site, matrix width=$width)\n" if length($site) != $width;
+	
+	$site =~tr/acgut/ACGUT/;
+	my $score = 0;
+	for (my $p = 0; $p < $width; $p++)
+	{
+		my $c = substr ($site, $p, 1);
+		if (exists $matrix->[$p]->{$c})
+		{
+			$score += $matrix->[$p]->{$c};
+		}
+		else
+		{
+			$score += min ($matrix->[$p]->{'A'}, $matrix->[$p]->{'C'}, $matrix->[$p]->{'G'}, $matrix->[$p]->{'T'});
+		}
+	}
+	return $score;
+}
+
+#Date: 09/29/2006
+sub ToFrequencyMatrix
+{
+	my $matrix = $_[0];
+	my @bases = ('A', 'C', 'G', 'T');
+	my $width = @$matrix;
+	my $nseq = $matrix->[0]->{'A'} + $matrix->[0]->{'C'} + $matrix->[0]->{'G'} + $matrix->[0]->{'T'};
+	$nseq = int ($nseq + 0.5);
+
+	for (my $p = 0; $p < $width; $p++)
+	{
+		my $nseq = $matrix->[$p]->{'A'} + $matrix->[$p]->{'C'} + $matrix->[$p]->{'G'} + $matrix->[$p]->{'T'};
+		foreach my $b (@bases)
+		{
+			Croak::carp ("negative matrix elements (p=$p, base=$b, value=" . $matrix->[$p]->{$b} . ")\n") if $matrix->[$p]->{$b} < 0;
+			$matrix->[$p]->{$b} /= $nseq; 
+		}
+	}
+}
+
+#Date: 09/29/2006
+sub ToBayesianMatrix
+{
+	my ($matrix, $baseComp) = @_;
+	my $prior = 0.5;
+	$prior = $_[2] if (@_ > 2);
+
+	my @bases = ('A', 'C', 'G', 'T');
+	my $width = @$matrix;
+	my $nseq = $matrix->[0]->{'A'} + $matrix->[0]->{'C'} + $matrix->[0]->{'G'} + $matrix->[0]->{'T'};
+	$nseq = int ($nseq + 0.5);
+
+	for (my $p = 0; $p < $width; $p++)
+	{
+		my $nseq = $matrix->[$p]->{'A'} + $matrix->[$p]->{'C'} + $matrix->[$p]->{'G'} + $matrix->[$p]->{'T'};
+		foreach my $b (@bases)
+		{
+			Croak::carp ("negative matrix elements (p=$p, base=$b, value=" . $matrix->[$p]->{$b} . ")\n") if $matrix->[$p]->{$b} < 0;
+			$matrix->[$p]->{$b} /= $nseq; 
+			$matrix->[$p]->{$b} = log (($matrix->[$p]->{$b} + $prior * $baseComp->{$b}) / ($baseComp->{$b} * (1 + $prior))) / log (2);
+		}
+	}
 }
 
 1;

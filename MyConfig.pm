@@ -25,6 +25,7 @@ sub getGenomeDir
 	my $species =$_[0];
 	return "$projHome/data/mm5"	if ($species eq 'mm5');
 	return "$projHome/data/mm6" if ($species eq 'mm6');
+	return "$projHome/data/mm8" if ($species eq 'mm8');
 	return "$projHome/data/hg17" if ($species eq 'hg17');
 	return "$projHome/data/hg18" if ($species eq 'hg18');
 }

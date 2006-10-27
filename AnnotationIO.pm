@@ -679,6 +679,101 @@ sub indexBigPhastConsFile
 	return {file=>Common::getFullPath($in), index=>\@ret};
 }
 
+
+sub indexBigFastaFile
+{
+	my $in = $_[0];
+	my @ret;
+
+	my $fin = new FileHandle;
+	open ($fin, "<$in") || Carp::croak "can not open file $fin to read\n";
+
+	#seek ($fin, 0, 0);
+	my $currPos = tell ($fin);
+	my $line = <$fin>;
+
+	my $n = 0;
+	while (1)
+	{
+		chomp $line;
+		if ($line =~/^\s*$/)
+		{
+			$currPos = tell($fin);
+			my $done = ($line =<$fin>);
+			last unless $done;
+			next;
+		}
+		
+		if ($line =~/^\#/)
+		{
+			$currPos = tell($fin);
+			my $done = ($line =<$fin>);
+			last unless $done;
+			next;
+		}
+		
+		if ($line=~/^\>/)
+		{
+			$line = substr($line, 1);
+			my @cols = split (/\s/, $line);
+			my $id = shift @cols;
+			my $entry = {id=>$id, pointer=>$currPos};
+			push @ret, $entry;
+
+			#if ($n - int($n / 500) * 500 == 0)
+			#{
+			#	print "$n...\n";
+			#}
+			#$n++;
+		}
+		$currPos = tell($fin);
+
+		my $done = ($line =<$fin>);
+		last unless $done;
+	}
+	close ($fin);
+	return {file=>Common::getFullPath($in), index=>\@ret};
+}
+
+sub readBigFastaFile
+{
+	my ($in, $seqInfo) = $_[0];
+	my $fin = new FileHandle;
+
+	open ($fin, "<$in") || Carp::croak "can not open file $in to read\n";
+	my $pointer = $seqInfo->{"pointer"};
+	my $id = $seqInfo->{"id"};
+	seek ($fin, $pointer, 0); #go to the point
+	my $line = <$fin>;	#head line of the seq
+	Carp::croak "can not find header line for seq $id at $pointer\n" unless $line=~/^\>/;
+	my $id2 = substr($line, 1);
+	my $desc = "";
+	if ($id2 =~/^(\S+)\s+(\S.*?)$/)
+	{
+		$id2 = $1;
+		$desc = $2;
+	}
+	
+	Carp::croak "the sequence id in fasta file ($id2) is not equal to the id ($id) in index\n" if $id ne $id2;
+   	
+	my $seq = "";
+	while ($line = <$fin>)
+	{
+		chomp $line;
+		next if $line =~/^\s*$/;
+		next if $line =~/^\#/;
+		
+		last if ($line =~/^\>/);
+		$seq .= $line;
+	}	
+	close ($fin);
+
+	Carp::croak "the length of sequence $id is zero\n" if (length($seq) == 0);
+
+	return {id=>$id, desc=>$desc, seq=>$seq};
+}
+
+
 sub readPhastconsIndexFile
 {
 	my $in = $_[0];

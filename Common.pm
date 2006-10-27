@@ -423,7 +423,7 @@ sub blat
 	my $out = "$cache/blatout.".time ().rand();
 	Carp::croak "the output $out already exists\n" if -f $out;
 	
-	system ("$blat $db $query $out");
+	system ("$blat $db $query $out >& /dev/null");
 	my $result = AnnotationIO::readPslFile ($out);
 	unlink $out if -f $out;
 	return $result;

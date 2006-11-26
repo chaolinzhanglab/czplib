@@ -31,6 +31,19 @@ sub getFullPath
 	return "$pwd/$path";
 }
 
+sub getTaxId
+{
+	my $org = $_[0];
+	Carp::croak "The name of organism $org is wrong\n" if (length($org) < 2);
+	$org = substr($org, 0, 2);
+	my $map = {hg=>9606,    #human
+			mm=>10090,  #mouse
+			rn=>10116,  #rat
+			dm=>7227,   #fly
+			ce=>6239};  #worm
+    Carp::croak "The name of organism $org can not be found\n" unless exists $map->{$org};
+    return exists $map->{$org} ? $map->{$org} : 0;
+}
 
 sub ls
 {
@@ -429,6 +442,7 @@ sub blat
 	return $result;
 }
 
+
 #Convert count matrix to stormo matrix
 #see AnnotationIO for the data structure of matrix
 #
@@ -558,6 +572,51 @@ sub ToBayesianMatrix
 		}
 	}
 }
+
+sub waitUntilQsubDone
+{
+	my ($user, $jobName, $nSplit, $verbose) = @_;
+	my $secondSlept = 0;
+	while (1)
+	{
+		my @qstat = `qstat -u $user`;
+		#remove title lines
+		if (@qstat)
+		{
+			shift @qstat;
+			shift @qstat;
+		}
+		my $jobNotFinished = 0;
+	
+		foreach my $line (@qstat)
+		{
+			chomp $line;
+			my @cols = split (/\s+/, $line);
+			my $jname = $cols[2];
+
+			$jobNotFinished++ if ($jname eq $jobName);
+		}
+
+		if ($jobNotFinished > 0)
+		{
+			$secondSlept += 10;
+			if ($verbose)
+			{
+				my $date = `date`;
+				chomp $date;
+				print "$date: $jobNotFinished of $nSplit jobs are still running...\n" if ($secondSlept - int($secondSlept / 60) * 60 == 0)
+			}
+			sleep (10);	#10 second
+		}
+		else
+		{
+			print "done\n" if $verbose;
+			last;
+		}
+	}
+}
+
+
 
 1;
 

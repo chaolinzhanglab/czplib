@@ -31,6 +31,7 @@ sub readBedFile
 	while ($line = <$fd>)
 	{
 		next if $line =~/^\s*$/;
+		next if $line =~/^\#/;
 		next if $line =~/^track name\=/;
 		my @cols = split (/\s+/, $line);
 		Carp::croak "less than three columns in $in\n" if @cols < 3;
@@ -62,6 +63,8 @@ sub readBedFile
 		}
 		
 		$entry->{"chromEnd"} -= 1;
+		$entry->{"thickEnd"} -= 1 if (exists $entry->{"thickEnd"});
+		
 		Carp::croak "chromStart (" . $entry->{"chromStart"} . ")  > chromEnd (" . $entry->{"chromEnd"} . ")\n" 
 		if ($entry->{"chromStart"} > $entry->{"chromEnd"});
 		
@@ -103,6 +106,9 @@ sub readPslFile
 		next if $line =~/^\s*$/;
 		
 		my @cols = split (/\t/, $line);
+		
+		shift @cols if ($#cols == 21); #the first column is the bin id
+		
 		#print join ("|\n", @cols), "|\n";
 		Carp::croak ("the number of columns is incorrect\n") if $#cols != 20;
 		
@@ -211,7 +217,15 @@ sub writeBedFile
 	
 	foreach my $r (@$regions)
 	{
+		#this is not a real copy
+		
 		my %rCopy = %$r;
+
+		$rCopy{"chromEnd"} += 1;
+		if (exists $rCopy{'thickEnd'})
+		{
+			$rCopy{'thickEnd'} += 1;
+		}
 		if (exists $rCopy{'blockCount'})
 		{
 			Carp::croak "no blockSizes\n" unless exists $rCopy {'blockSizes'};
@@ -222,7 +236,7 @@ sub writeBedFile
 		}
 		
 		#print STDOUT Dumper ($r), "\n";
-		print join ("\t", $rCopy{"chrom"}, $rCopy{"chromStart"}, $rCopy{"chromEnd"} + 1);
+		print join ("\t", $rCopy{"chrom"}, $rCopy{"chromStart"}, $rCopy{"chromEnd"});
 		for (my $i = 3; $i < $colNum; $i++)
 		{
 			my $col = $colNames[$i];
@@ -240,6 +254,92 @@ sub writeBedFile
 	close ($fout);
 }
 
+
+sub printBedRegion
+{
+	my $region = $_[0];
+	my $str = printBedRegionToString ($region);
+	print $str, "\n";
+}
+
+#generate bed format into string
+sub printBedRegionToString
+{
+	my $region = $_[0];
+	
+	my @colNames = qw (chrom chromStart chromEnd name score strand thickStart thickEnd itemRgb blockCount blockSizes blockStarts);
+	
+	my $colNum = keys %$region;
+	
+	my %rCopy = %$region;
+	$rCopy{"chromEnd"} += 1;
+	if (exists $rCopy{'thickEnd'})
+	{
+		$rCopy{'thickEnd'} += 1;
+	}
+	
+	if (exists $rCopy{'blockCount'})
+	{
+		Carp::croak "no blockSizes\n" unless exists $rCopy {'blockSizes'};
+		Carp::croak "no blockStarts\n" unless exists $rCopy {'blockStarts'};
+			
+		$rCopy{'blockSizes'} = join (",", @{$rCopy{'blockSizes'}});
+		$rCopy{'blockStarts'} = join (",", @{$rCopy{'blockStarts'}});
+	}
+	
+	my $ret = join ("\t", $rCopy{"chrom"}, $rCopy{"chromStart"}, $rCopy{"chromEnd"});
+	for (my $i = 3; $i < $colNum; $i++)
+	{
+		my $col = $colNames[$i];
+		if (exists $rCopy{$col})
+		{
+			$ret .= "\t" . $rCopy{$col};
+		}
+		else
+		{
+			Carp::croak "col=$col is not defined\n"; 
+		}
+	}
+	return $ret;
+}
+
+sub readWigFile
+{
+	my $in = $_[0];
+	my $fin = new FileHandle;
+	my @ret;
+	open ($fin, "<$in") || Carp::croak "can not open file $in to read\n";
+	while (my $line = <$fin>)
+	{
+		chomp $line;
+		next if $line =~/^\s*$/;
+		next if $line =~/^\#/;
+		my ($chrom, $chromStart, $chromEnd, $score) = split (/\s/, $line);
+		push @ret, {chrom=>$chrom, chromStart=>$chromStart, chromEnd=>$chromEnd-1, score=>$score};
+	}
+	close ($fin);
+	return \@ret;
+}
+
+sub writeWigFile
+{
+	my ($regions, $header, $out) = @_;
+	my $fout = new FileHandle;
+	open ($fout, ">$out") || Carp::croak "can not open file $out to write\n";
+	if ($header ne '')
+	{
+		print $fout $header, "\n";
+	}
+
+	foreach my $r (@$regions)
+	{
+		print $fout join ("\t", $r->{"chrom"},
+				$r->{"chromStart"},
+				$r->{"chromEnd"} + 1,
+				$r->{"score"}), "\n";
+	}
+	close ($fout);
+}
 
 sub readSgrFile
 {
@@ -699,16 +799,16 @@ sub indexBigFastaFile
 		if ($line =~/^\s*$/)
 		{
 			$currPos = tell($fin);
-			my $done = ($line =<$fin>);
-			last unless $done;
+			my $more = ($line =<$fin>);
+			last unless $more;
 			next;
 		}
 		
 		if ($line =~/^\#/)
 		{
 			$currPos = tell($fin);
-			my $done = ($line =<$fin>);
-			last unless $done;
+			my $more = ($line =<$fin>);
+			last unless $more;
 			next;
 		}
 		
@@ -728,21 +828,31 @@ sub indexBigFastaFile
 		}
 		$currPos = tell($fin);
 
-		my $done = ($line =<$fin>);
-		last unless $done;
+		my $more = ($line =<$fin>);
+		last unless $more;
 	}
 	close ($fin);
 	return {file=>Common::getFullPath($in), index=>\@ret};
 }
 
+##---------------------------------------------------------
+# readBigFastaFile
+# in		: fasta file name
+# seqInfo	: hash table {id=>id, pointer=>pointer}
+#             when id is empty, we do not check consistency
+#             sequence id
+#
+#----------------------------------------------------------
+#
 sub readBigFastaFile
 {
-	my ($in, $seqInfo) = $_[0];
+	my ($in, $seqInfo) = @_;
 	my $fin = new FileHandle;
 
 	open ($fin, "<$in") || Carp::croak "can not open file $in to read\n";
 	my $pointer = $seqInfo->{"pointer"};
 	my $id = $seqInfo->{"id"};
+	#print "readBigFastaFile: id=$id, pointer=$pointer\n";
 	seek ($fin, $pointer, 0); #go to the point
 	my $line = <$fin>;	#head line of the seq
 	Carp::croak "can not find header line for seq $id at $pointer\n" unless $line=~/^\>/;
@@ -754,8 +864,11 @@ sub readBigFastaFile
 		$desc = $2;
 	}
 	
-	Carp::croak "the sequence id in fasta file ($id2) is not equal to the id ($id) in index\n" if $id ne $id2;
-   	
+	if ($id ne '')
+	{
+		Carp::croak "the sequence id in fasta file ($id2) is not equal to the id ($id) in index\n" if $id ne $id2;
+	}
+	
 	my $seq = "";
 	while ($line = <$fin>)
 	{
@@ -773,7 +886,13 @@ sub readBigFastaFile
 	return {id=>$id, desc=>$desc, seq=>$seq};
 }
 
-
+##----------------------------------------------------------------
+#
+# Index phastcons file for efficient accessing
+#
+# Status: tested
+# ----------------------------------------------------------------
+# 
 sub readPhastconsIndexFile
 {
 	my $in = $_[0];
@@ -793,6 +912,14 @@ sub readPhastconsIndexFile
 	close ($fin);
 	return {file=>$file, index=>\@ret};
 }
+
+##----------------------------------------------------------------
+# readBigPhastConsFile
+#
+# blockInfo{chrom=>, chromStart=>, chromEnd=>, step=>, pointer=>
+# 	generated by readPhastconsIndexFile (above)
+# Status: tested
+# ----------------------------------------------------------------
 
 sub readBigPhastConsFile
 {
@@ -829,4 +956,234 @@ sub readBigPhastConsFile
 	return {chrom=>$blockInfo->{"chrom"}, chromStart=>$start, chromEnd=>$end, step=>$step, scores=>\@ret};
 }
 
+#$seqs: reference to an array
+#		each element should have {id=>id, desc=>desc, seq=>seq}
+#
+sub writeFastaFile
+{
+	my ($out, $seqs);
+	
+	my $fout = new FileHandle;
+	open ($fout, ">$out") || Carp::croak "can not open file $out to write\n";
+	foreach my $seq (@$seqs)
+	{
+		writeFastaSeq ($fout, $seq);
+	}
+	close ($fout);
+}
+
+##-------------------------------------------------------------
+# write one fasta sequence
+#
+# Status: tested
+# -------------------------------------------------------------
+sub writeFastaSeq
+{
+	my ($fout, $seq) = @_;
+	my $id = $seq->{"id"};
+	$id .= "\t" . $seq->{"desc"} if (exists $seq->{"desc"} && length($seq->{"desc"}) > 0);
+	print $fout ">$id\n";
+	print $fout $seq->{"seq"}, "\n";
+}
+
+
+#assume seq1 is genomic sequence
+#seq2 is transcript (from a db)
+sub readsim4File
+{
+	my $in = $_[0];
+	my @ret;
+	
+	my ($seq1, $seq2, $seq2id, $strand) = ("", "", "", '+');
+	my ($seq1len, $seq2len) = (0, 0);
+	my $seq1blocks = [];
+	my $seq2blocks = [];
+	my $blockscore = [];
+	
+	my $match = 0; #total length of matches
+	my $identity = 0; #number of correct bases
+	
+	my $fin = new FileHandle;
+	open ($fin, "<$in") || Carp::croak "can not open file $in to read\n";
+	while (my $line=<$fin>)
+	{
+		chomp $line;
+		next if $line=~/^\s*$/;
+		
+		if ($line=~/^seq1/)
+		{
+			if (@$seq1blocks > 0)
+			{
+				$identity = int ($identity/100 + 0.5);
+				push @ret, {seqfile1=>$seq1, seqfile2=>$seq2, seq2id=>$seq2id, 
+						seq1len=>$seq1len, seq2len=>$seq2len,
+						match=> $match, identity=>$identity, strand=>$strand, 
+						seq1blocks=>$seq1blocks,
+						seq2blocks=>$seq2blocks,
+						blockscore=>$blockscore};
+			}
+			
+			$line=~/\=\s+(\S+)\,\s(\d+)\sbp$/;
+			$seq1 = $1; $seq1len = $2;
+
+			#initialize
+			$seq2 = "";
+			$seq2id = "";
+			$seq2len = 0;
+			$seq1blocks = [];
+			$seq2blocks = [];
+			$blockscore = [];
+			$match = 0;
+			$identity = 0;
+			$strand = '+';
+		}
+		elsif ($line=~/^seq2/)
+		{
+			$line=~/\=\s+(\S+)\s\((.*?)\)\,\s(\d+)\sbp$/;
+			$seq2 = $1; $seq2id = $2; $seq2len = $3;
+		}
+		elsif ($line=~/^\(complement\)/)
+		{
+			$strand = '-';
+		}
+		elsif ($line=~/^(\d+)\-(\d+)\s+\((\d+)\-(\d+)\)\s+(\d+)\%/)
+		{
+			#		print join ("\t", $1, $2, $3, $4, $5), "\n";
+			my %s1b = (start=>$1-1, end=>$2-1);	#convert to 0-based coordinates
+			my %s2b = (start=>$3-1, end=>$4-1);
+			
+			push @$seq1blocks, \%s1b;
+			push @$seq2blocks, \%s2b;
+			push @$blockscore, $5;
+
+			#my $c = @$seq1blocks;
+			#print "block num = $c\n";
+			
+			$match += ($2 - $1 + 1);
+			$identity += ($2 - $1 + 1) * $5;
+		}
+		else
+		{
+			Carp::croak "$in has been disrupted\n$line\n";
+		}
+	}
+	if (@$seq2blocks > 0)
+	{
+		$identity = int ($identity/100 + 0.5);
+		push @ret, {seqfile1=>$seq1, seqfile2=>$seq2, seq2id=>$seq2id, 
+			seq1len=>$seq1len, seq2len=>$seq2len,
+			match=> $match, identity=>$identity, strand=>$strand,
+			seq1blocks=>$seq1blocks,
+			seq2blocks=>$seq2blocks,
+			blockscore=>$blockscore};
+		
+	}
+			
+	close ($fin);
+	return \@ret;
+}
+
+sub printSim4Align
+{
+	my $align = $_[0];
+
+	print "\n\n";
+	print "seq1 = ", $align->{"seqfile1"}, ", ", $align->{"seq1len"}, " bp\n";
+	print "seq2 = ", $align->{"seqfile2"}, " (", $align->{"seq2id"}, "), ", $align->{"seq2len"}, " bp\n";
+
+	print "\n";
+
+	my $seq1blocks = $align->{"seq1blocks"};
+	my $seq2blocks = $align->{"seq2blocks"};
+	
+	my $nblocks = @$seq1blocks;
+	for (my $i = 0; $i < $nblocks; $i++)
+	{
+		print      ($seq1blocks->[$i]->{"start"} + 1) . "-" . ($seq1blocks->[$i]->{"end"} + 1) . "\t";
+		print "(", ($seq2blocks->[$i]->{"start"} + 1), "-", ($seq2blocks->[$i]->{"end"} + 1), ")\t";
+		print  $align->{"blockscore"}->[$i], "%", "\n";
+	}
+}
+
+sub sim4ToBed
+{
+	my ($align, $gene) = @_;
+	
+	my @blockSizes;
+	my @blockStarts;
+
+	my $score = $align->{"identity"} / $align->{"match"};
+	$score = sprintf ("%.2f", $score);
+	
+	my $geneBlocks = $align->{"seq1blocks"};	
+	my $nblocks = @$geneBlocks;
+	
+	my $chromStart = $geneBlocks->[0]->{"start"};
+	my $chromEnd = $geneBlocks->[$nblocks - 1]->{"end"};
+		
+	for (my $i = 0; $i < $nblocks; $i++)
+	{
+		$blockSizes[$i] = $geneBlocks->[$i]->{"end"} - $geneBlocks->[$i]->{"start"} + 1;
+		$blockStarts[$i] = $geneBlocks->[$i]->{"start"} - $chromStart;
+	}
+		
+	my $region = {chrom=>$gene,			#gene id
+			chromStart=>$chromStart,	#start on gene contig
+			chromEnd=>$chromEnd, 	#end on gene contig
+			name=>$align->{"seq2id"},
+			score=>$score, 
+			strand=> '+', 		#always set to '+', the gene strand, although a few transcripts were aligned to the reverse strand
+			thickStart=>$chromStart,
+			thickEnd=>$chromEnd,
+			itemRgb=>"0,0,0",
+			blockCount=>$nblocks,
+			blockSizes=>\@blockSizes,
+			blockStarts=>\@blockStarts};
+	return $region;
+}
+
+
+sub read1LQFile
+{
+	my $in = $_[0];
+	my $fin = new FileHandle;
+
+	open ($fin, "<$in") || Carp::croak "can not open file $in to read\n";
+	while (my $line=<$fin>)
+	{
+		chomp $line;
+		last if $line=~/^X\tY/;
+	}
+
+	my @ret;
+	while (my $line = <$fin>)
+	{
+		chomp $line;
+		next if $line=~/^\s*$/;
+		my @cols = split ("\t", $line);
+		push @ret, {
+			X=>$cols[0],
+			Y=>$cols[1],
+			SEQUENCE=>$cols[2],
+			DESTYPE=>$cols[3],
+			FEATURE=>$cols[4],
+			QUALIFIER=>$cols[5],
+			EXPOS=>$cols[6],
+			PLEN=>$cols[7],
+			POS=>$cols[8],
+			CBASE=>$cols[9],
+			PBASE=>$cols[10],
+			TBASE=>$cols[11],
+			IPBASE=>$cols[12],
+			UNIT=>$cols[13],
+			BLOCK=>$cols[14],
+			ATOM=>$cols[15]
+		};
+	}
+	close ($fin);
+	return \@ret;
+}
+
 1;
+
+

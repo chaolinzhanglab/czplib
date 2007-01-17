@@ -840,6 +840,12 @@ sub indexBigPhastConsFile
 		}
 	}
 	close ($fin);
+
+	if ($entry)
+	{
+		$entry->{"chromEnd"} = $entry->{"chromStart"} + $n - 1;
+		push @ret, $entry;
+	}
 	return {file=>Common::getFullPath($in), index=>\@ret};
 }
 

@@ -28,6 +28,7 @@ sub getGenomeDir
 	return "$projHome/data/mm8" if ($species eq 'mm8');
 	return "$projHome/data/hg17" if ($species eq 'hg17');
 	return "$projHome/data/hg18" if ($species eq 'hg18');
+	return "$projHome/data/rn4" if ($species eq 'rn4');
 	return "$projHome/data/danRer4" if ($species eq 'danRer4');
 	return "$projHome/data/dm2" if ($species eq 'dm2');
 	Carp::croak "can not find the directory for $species\n";

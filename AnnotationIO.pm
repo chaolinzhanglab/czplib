@@ -143,6 +143,89 @@ sub readPslFile
 	return \@results;
 }
 
+
+#note Psl used absolute ccornidates
+sub pslToBed
+{
+	my ($align, $gene) = @_;
+	my $useQuery = 0;
+	
+	if (@_> 2)
+	{
+		$useQuery = $_[2];
+	}
+	
+	my $chromStart = $align->{"tStart"};
+	my $chromEnd = $align->{"tEnd"};
+	my $name = $align->{"qName"};
+	my @blockStarts;
+    foreach my $s (@{$align->{"tStarts"}})
+	{
+		push @blockStarts, $s - $chromStart;
+	}
+			
+	if ($useQuery)
+	{
+		$chromStart = $align->{"qStart"};
+		$chromEnd = $align->{"qEnd"};
+		$name = $align->{"tName"};
+		@blockStarts = ();
+		foreach my $s (@{$align->{"qStarts"}})
+		{
+			push @blockStarts, $s - $chromStart;
+		}
+	}
+	
+	my $chrom = $gene;
+	my $score = 0;
+	my $strand = '+';#always set to '+', the gene strand, although a few transcripts were aligned to the reverse strand
+	my $blockCount = $align->{"blockCount"};
+	my @blockSizes = @{$align->{"blockSizes"}};
+	
+	my $region = {chrom=>$gene,			#gene id
+		chromStart=>$chromStart,	#start on gene contig
+		chromEnd=>$chromEnd, 	#end on gene contig
+		name=>$name,
+		score=>$score, 
+		strand=> $strand,
+		thickStart=>$chromStart,
+		thickEnd=>$chromEnd,
+		itemRgb=>"0,0,0",
+		blockCount=>$blockCount,
+		blockSizes=>\@blockSizes,
+		blockStarts=>\@blockStarts
+	};
+	return $region;
+}
+
+sub printPslAlign
+{
+	my $align = $_[0];
+	print join ("\t",
+		$align->{"matches"},
+		$align->{"misMatches"},
+		$align->{"repMatches"},
+		$align->{"nCount"},
+		$align->{"qNumInsert"},
+		$align->{"qBaseInsert"},
+		$align->{"tNumInsert"},
+		$align->{"tBaseInsert"},
+		$align->{"strand"},
+		$align->{"qName"},
+		$align->{"qSize"},
+		$align->{"qStart"},
+		$align->{"qEnd"} + 1,
+		$align->{"tName"}, #tName
+		$align->{"tSize"},
+		$align->{"tStart"},#tStart
+		$align->{"tEnd"} + 1, #tEnd
+		$align->{"blockCount"},
+		join (",", @{$align->{"blockSizes"}}) . ",", #blockSizes
+		join (",", @{$align->{"qStarts"}}) . ",", #qStarts
+		join (",", @{$align->{"tStarts"}}) . ","),  #tStarts
+		"\n";
+}
+
 sub writePslFile
 {
 	my ($aligns, $out) = @_;
@@ -157,35 +240,16 @@ sub writePslFile
 	my $fout = new FileHandle;
 
 	open ($fout, ">$out") || Carp::croak "can not open file $out to write\n";
-	
 	print $fout $header if $printHeader;
 	
+	my $stdout = select ($fout);
 	foreach my $align (@$aligns)
 	{	
-		print $fout join ("\t",
-			$align->{"matches"},
-			$align->{"misMatches"},
-			$align->{"repMatches"},
-			$align->{"nCount"},
-			$align->{"qNumInsert"},
-			$align->{"qBaseInsert"},
-			$align->{"tNumInsert"},
-			$align->{"tBaseInsert"},
-			$align->{"strand"},
-			$align->{"qName"},
-			$align->{"qSize"},
-			$align->{"qStart"},
-			$align->{"qEnd"} + 1,
-			$align->{"tName"}, #tName
-			$align->{"tSize"},
-			$align->{"tStart"},#tStart
-			$align->{"tEnd"} + 1, #tEnd
-			$align->{"blockCount"},
-			join (",", @{$align->{"blockSizes"}}) . ",", #blockSizes
-			join (",", @{$align->{"qStarts"}}) . ",", #qStarts
-			join (",", @{$align->{"tStarts"}}) . ","),  #tStarts
-			"\n";
+		printPslAlign ($align);
 	}
+
+	close ($fout);
+	select ($stdout);
 }
 
 
@@ -1143,6 +1207,9 @@ sub sim4ToBed
 }
 
 
+
+
+
 sub read1LQFile
 {
 	my $in = $_[0];
@@ -1183,6 +1250,143 @@ sub read1LQFile
 	close ($fin);
 	return \@ret;
 }
+
+sub parseCelHeader
+{
+	my $fin = $_[0];
+	my %ret;
+	while (my $line =<$fin>)
+	{
+		chomp $line;
+		last if $line=~/^\s*$/;
+		my @cols = split ("=", $line);
+		Carp::croak "incorrect name=value pair: $line\n" if @cols < 2;
+		my $name = shift @cols;
+		my $value = join ("=", @cols);
+		$ret{$name} = $value;
+	}
+	return \%ret;
+}
+
+sub parseCelIntensity
+{
+	my $fin = $_[0];
+	my $ret;
+	my $line = <$fin>;
+	my ($name, $numCells) = split ("=", $line);
+	
+	Carp::croak "NumberCells not found:$line\n" if $name ne 'NumberCells';
+	$line = <$fin>;
+	for (my $i = 0; $i < $numCells; $i++)
+	{
+		my $line = <$fin>;
+		chomp $line;
+		my @cols = split (/\s+/, $line);
+		shift @cols if @cols > 5;
+		Carp::croak "incorrect number of columns at line: $line\n" if @cols != 5;
+		my ($x, $y, $mean, $stdev, $npixels) = @cols;
+		$ret->[$x][$y] = {MEAN=>$mean, STDV=>$stdev};
+	}
+	return $ret;
+}
+
+sub parseCelMasksOrOutliers
+{
+	my $fin = $_[0];
+	my @ret;
+	my $line = <$fin>;
+	my ($name, $numCells) = split ("=", $line);
+	
+	Carp::croak "NumberCells not found:$line\n" if $name ne 'NumberCells';
+	$line = <$fin>;
+	for (my $i = 0; $i < $numCells; $i++)
+	{
+		my $line = <$fin>;
+		chomp $line;
+		my @cols = split (/\s+/, $line);
+		shift @cols if @cols > 2;
+		Carp::croak "incorrect number of columns at line: $line\n" if @cols != 2;
+		my ($x, $y) = @cols;
+		push @ret, {X=>$x, Y=>$y};
+	}
+	return \@ret;
+}
+
+sub parseCelModified
+{
+	my $fin = $_[0];
+	my @ret;
+	my $line = <$fin>;
+	my ($name, $numCells) = split ("=", $line);
+	
+	Carp::croak "NumberCells not found:$line\n" if $name ne 'NumberCells';
+	$line = <$fin>;
+	for (my $i = 0; $i < $numCells; $i++)
+	{
+		my $line = <$fin>;
+		chomp $line;
+		my @cols = split (/\s+/, $line);
+		shift @cols if @cols > 3;
+		Carp::croak "incorrect number of columns at line: $line\n" if @cols != 3;
+		my ($x, $y, $origMean) = @cols;
+		push @ret, {X=>$x, Y=>$y, ORIGMEAN=>$origMean};
+	}
+	return \@ret;
+}
+
+
+sub readCelFile
+{
+	my $in = $_[0];
+	my %ret;
+   	
+	my $fin = new FileHandle;
+	open ($fin, "<$in") || Carp::croak "can not open file $in to read\n";
+	my $line = <$fin>;
+	$line = <$fin>;
+	chomp $line;
+	my ($name, $value) = split ("=", $line);
+	Carp::croak "only Cel file version 3 is recognized\n" if $value != 3;
+	my $iter = 0;
+	while ($line =<$fin>)
+	{
+		$iter++;
+		#last if $iter > 10;
+		chomp $line;
+		next if $line=~/^\s*$/;
+		#print $line, "\n";
+		if ($line eq '[HEADER]')
+		{
+			#print "parsing header...\n";
+			$ret{"header"} = parseCelHeader ($fin);
+			Carp::croak "missing number of columns\n" unless exists $ret{"header"}->{"Cols"};
+			Carp::croak "missing number of rows\n" unless exists $ret{"header"}->{"Rows"};
+		}
+		elsif ($line eq '[INTENSITY]')
+		{
+			#print "parsing intensity...\n";
+			$ret{"intensity"} = parseCelIntensity ($fin);
+			Carp::croak "incorrect number of columns\n" if @{$ret{"intensity"}} != $ret{"header"}->{"Cols"};
+			Carp::croak "incorrect number of rows\n" if @{$ret{"intensity"}->[0]} != $ret{"header"}->{"Rows"};
+		}
+		elsif ($line eq '[MASKS]')
+		{
+			#print "parsing masks...\n";
+			$ret{"masks"} = parseCelMasksOrOutliers ($fin);
+		}
+		elsif ($line eq '[OUTLIERS]')
+		{
+			$ret{"outliers"} = parseCelMasksOrOutliers ($fin);
+		}
+		elsif ($line eq '[MODIFIED]')
+		{
+			$ret{"modified"} = parseCelModified ($fin);
+		}
+	}
+	close ($fin);
+	return \%ret;	
+}
+
 
 1;
 

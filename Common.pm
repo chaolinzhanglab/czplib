@@ -22,6 +22,7 @@ Aug, 2005
 =cut
 
 
+#get full path from relative path
 use Cwd;
 sub getFullPath
 {
@@ -31,6 +32,7 @@ sub getFullPath
 	return "$pwd/$path";
 }
 
+#get taxonomic id from common names
 sub getTaxId
 {
 	my $org = $_[0];
@@ -40,10 +42,24 @@ sub getTaxId
 			mm=>10090,  #mouse
 			rn=>10116,  #rat
 			dm=>7227,   #fly
-			ce=>6239};  #worm
+			ce=>6239,	#worm
+			dr=>7955	#zebrafish
+	};
     Carp::croak "The name of organism $org can not be found\n" unless exists $map->{$org};
     return exists $map->{$org} ? $map->{$org} : 0;
 }
+
+#check enum param type
+sub checkParamType
+{
+	my ($type, $enum) = @_;
+	foreach my $t (@$enum)
+	{
+		return $type if $type eq $t;
+	}
+	return '';
+}
+
 
 sub ls
 {
@@ -401,6 +417,7 @@ sub contig2genome
 			chromEnd=>$genomeEnd};
 }
 
+#base composition
 sub baseComp
 {
 	my $seqs = $_[0];
@@ -422,6 +439,41 @@ sub baseComp
 	$g /= $n;
 	$t /= $n;
 	return {A=>$a, C=>$c, G=>$g, T=>$t, N=>$n};
+}
+
+
+#calculate percent identity from psl line
+#according to the pslCalcMilliBad function
+#http://genome.ucsc.edu/FAQ/FAQblat.html
+
+sub calcPslPercentIdentity
+{
+	my ($psl, $isMrna) = @_;
+	my $sizeMul = 1; #3 for protein
+	my $milliBad = 0;
+	
+	my $qAliSize = $sizeMul * ($psl->{"qEnd"} - $psl->{"qStart"} + 1);
+	my $tAliSize = $psl->{"tEnd"} - $psl->{"tStart"} + 1;
+	my $aliSize = Common::min($qAliSize, $tAliSize);
+	return 0 if $aliSize <= 0;
+
+	my $sizeDif = $qAliSize - $tAliSize;
+	if ($sizeDif < 0)
+	{
+		$sizeDif = 0 - $sizeDif;
+		$sizeDif = 0 if $isMrna;
+	}
+	my $insertFactor = $psl->{"qNumInsert"};
+	$insertFactor += $psl->{"tNumInsert"} if ($isMrna == 0);
+
+	my $total = $sizeMul * ($psl->{"matches"} + $psl->{"repMatches"} + $psl->{"misMatches"});
+	
+	if ($total != 0)
+	{
+		$milliBad = $psl->{"misMatches"} * $sizeMul + $insertFactor + int(3*log(1+$sizeDif)+0.5);
+		$milliBad /= $total;
+	}
+	return (1- $milliBad);
 }
 
 sub blat

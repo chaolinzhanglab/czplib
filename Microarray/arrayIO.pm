@@ -85,8 +85,8 @@ sub readArray
 	}	
 	$array->{"hasCls"} = $hasCls;
 	$array->{"data"} = $data;
-	$array->{"arrayName"} = \@arrayName;
-	$array->{"geneName"} = \@geneName;
+	$array->{"arrayNames"} = \@arrayName;
+	$array->{"geneNames"} = \@geneName;
 	$array->{"arrayN"} = $arrayN;
 	$array->{"geneN"} = $geneN;
 	return $array;
@@ -122,7 +122,7 @@ sub writeArray
 	#print "OK1\n";
 	for ($a = 0; $a < $array->{"arrayN"}; $a++)
 	{
-		print $fd "\t", $array->{"arrayName"}->[$a];
+		print $fd "\t", $array->{"arrayNames"}->[$a];
 	}	
 	print $fd "\n";
 	
@@ -130,7 +130,7 @@ sub writeArray
 	#output data
 	for ($g = 0; $g < $array->{"geneN"}; $g++)
 	{
-		print $fd $array->{"geneName"}->[$g];
+		print $fd $array->{"geneNames"}->[$g];
 		for ($a = 0; $a < $array->{"arrayN"}; $a++)
 		{
 				#print "g = $g, a = $a\n";

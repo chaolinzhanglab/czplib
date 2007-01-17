@@ -31,16 +31,16 @@ sub subArrayMat
 #	print "array=", $arrayNew->{"arrayN"}, "\t gene=", $arrayNew->{"geneN"}, "\n";
 	
 	die "subArrayMat: incorrect parameters.\n" if ($arrayNew->{"arrayN"} <= 0 || $arrayNew->{"geneN"} <= 0);
-	my $arrayNameTmp = $array->{"arrayName"};
+	my $arrayNameTmp = $array->{"arrayNames"};
 	my @arrayNameTmp = @$arrayNameTmp;
 	@arrayNameTmp = @arrayNameTmp[@$arrayIdx];
 	
-	my $geneNameTmp = $array->{"geneName"};
+	my $geneNameTmp = $array->{"geneNames"};
 	my @geneNameTmp = @$geneNameTmp;	
 	@geneNameTmp = @geneNameTmp[@$geneIdx];
 
-	$arrayNew->{"arrayName"} = \@arrayNameTmp;
-	$arrayNew->{"geneName"} = \@geneNameTmp;
+	$arrayNew->{"arrayNames"} = \@arrayNameTmp;
+	$arrayNew->{"geneNames"} = \@geneNameTmp;
 
 	my ($g, $a);
 	

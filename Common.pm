@@ -258,6 +258,16 @@ sub ABS
 	return ($in >= 0)? $in : -$in;
 }
 
+sub mod
+{
+	Carp::croak __PACKAGE__ . "::mod: incorrect number of arguments\n" if @_ != 2;
+	my ($in, $div) = @_;
+
+	Carp::croak "only integer is accepted in mod\n" unless $in - int ($in) == 0 && $div - int($div) == 0;
+	
+	return $in - int(($in+0.5)/$div) * $div;
+}
+
 
 #sum
 sub sum
@@ -440,6 +450,27 @@ sub baseComp
 	$t /= $n;
 	return {A=>$a, C=>$c, G=>$g, T=>$t, N=>$n};
 }
+
+#base composition
+sub baseCount
+{
+	my $seqs = $_[0];
+	my ($a, $c, $g, $t) = (0, 0, 0, 0);
+	foreach my $seqStr (@$seqs)
+	{
+		my $a2 = ($seqStr=~tr/aA//);
+		my $c2 = ($seqStr=~tr/cC//);
+		my $g2 = ($seqStr=~tr/gG//);
+		my $t2 = ($seqStr=~tr/tTuU//);
+		$a += $a2;
+		$c += $c2;
+		$g += $g2;
+		$t += $t2;
+	}
+	my $n = $a + $c +$g + $t;
+	return {A=>$a, C=>$c, G=>$g, T=>$t, N=>$n};
+}
+
 
 
 #calculate percent identity from psl line

@@ -7,7 +7,7 @@ package MyConfig;
 use strict;
 
 
-my $projHome = "/mnt/raygun";
+my $projHome = "/mnt/raygun/zhangc";
 
 sub getDefaultCache
 {
@@ -16,21 +16,24 @@ sub getDefaultCache
 	
 	my $cacheHome = ".";
 	$cacheHome = $ENV{'CACHEHOME'} if exists $ENV{'CACHEHOME'};
-	my $cache = "$cacheHome/$base" . "_" . time();
+	my $cache = "$cacheHome/$base" . "_" . time() . "_" . rand();
 	return $cache;
 }
 
 sub getGenomeDir
 {
 	my $species =$_[0];
-	return "$projHome/data/mm5"	if ($species eq 'mm5');
-	return "$projHome/data/mm6" if ($species eq 'mm6');
-	return "$projHome/data/mm8" if ($species eq 'mm8');
-	return "$projHome/data/hg17" if ($species eq 'hg17');
-	return "$projHome/data/hg18" if ($species eq 'hg18');
-	return "$projHome/data/rn4" if ($species eq 'rn4');
-	return "$projHome/data/danRer4" if ($species eq 'danRer4');
-	return "$projHome/data/dm2" if ($species eq 'dm2');
+	my $genomeDir = "$projHome/data/genomes";
+	return "$genomeDir/mm5"	if ($species eq 'mm5');
+	return "$genomeDir/mm6" if ($species eq 'mm6');
+	return "$genomeDir/mm8" if ($species eq 'mm8');
+	return "$genomeDir/hg17" if ($species eq 'hg17');
+	return "$genomeDir/hg18" if ($species eq 'hg18');
+	return "$genomeDir/rn4" if ($species eq 'rn4');
+	return "$genomeDir/danRer4" if ($species eq 'danRer4');
+	return "$genomeDir/dm2" if ($species eq 'dm2');
+	return "$genomeDir/ce2" if ($species eq 'ce2');
+	return "$genomeDir/sacCer1" if ($species eq 'sacCer1');
 	Carp::croak "can not find the directory for $species\n";
 }
 

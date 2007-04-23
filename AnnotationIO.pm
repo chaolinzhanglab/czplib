@@ -177,7 +177,7 @@ sub pslToBed
 	}
 	
 	my $chrom = $gene;
-	my $score = 0;
+	my $score = Common::calcPslPercentIdentity ($align, 1);
 	my $strand = '+';#always set to '+', the gene strand, although a few transcripts were aligned to the reverse strand
 	my $blockCount = $align->{"blockCount"};
 	my @blockSizes = @{$align->{"blockSizes"}};
@@ -316,6 +316,7 @@ sub writeBedFile
 		print "\n";
 	}
 	close ($fout);
+	select ($stdout);
 }
 
 

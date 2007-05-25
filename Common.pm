@@ -200,6 +200,17 @@ sub randSeq
 	return (\@ret);
 }
 
+sub sampleSeq
+{
+	die "sampleSeq: incorrect number of parameters\n" if @_!= 3;
+	my ($start, $lenTotal, $lenSample) = @_;
+	my $end = $start + $lenTotal - 1;
+	my @seq = ($start..$end);
+	my $seqRand = randSeq ($start, $lenTotal);
+	my @seqRand = @$seqRand;
+	my @seqSample = @seq[@seqRand[(0..($lenSample-1))]];
+	return \@seqSample;
+}
 
 
 #/////////////////////////////Math//////////////////////////////////
@@ -509,17 +520,70 @@ sub calcPslPercentIdentity
 
 sub blat
 {
-	Carp::croak "three or four arguments expected\n" unless (@_ >= 3 && @_ <= 4);
+	Carp::croak "three or four arguments expected\n" unless (@_ >= 4 && @_ <= 5);
 	
-	my ($blat, $db, $query) = @_;
+	my ($blat, $db, $query, $cache) = @_;
 	
-	my $cache = "/tmp";
-	$cache = $_[3] if (@_ == 4 && (-d $_[3]));
+	#my $cache = "/tmp";
+	my $options = $_[4] if (@_ == 5); # && (-d $_[3]));
+	my $optPair = {
+		t=>1,
+		q=>1,
+		occ=>1,
+		tileSize=>1,
+		stepSize=>1,
+		oneOff=>1,
+		minMatch=>1,
+		minScore=>1,
+		minIdentity=>1,
+		maxGap=>1,
+		makeOcc=>1,
+		repMatch=>1,
+		mask=>1,
+		qMask=>1,
+		repeats=>1,
+		minRepDivergence=>1,
+		dots=>1,
+		out=>1,
+		maxIntron=>1
+	};
+	my $optLeft = {
+		prot=>1,
+		noHead=>1,
+		trimT=>1,
+		noTrimA=>1,
+		trimHardA=>1,
+		fastMap=>1,
+		fine=>1,
+		extendThroughN=>1
+	};
+	
+	my $optStr = "";
+	foreach my $opt (keys %$options)
+	{
+		if (exists $optPair->{$opt})
+		{
+			$optStr .= " -$opt=" . $options->{$opt};
+		}
+		elsif (exists $optLeft->{$opt})
+		{
+			$optStr .= " -$opt";
+		}
+		else
+		{
+			Carp::croak "bad options for blat: $opt\n";
+		}
+	}
 	
 	my $out = "$cache/blatout.".time ().rand();
 	Carp::croak "the output $out already exists\n" if -f $out;
+
+	my $cmd = "$blat $db $query $optStr $out >& /dev/null";
 	
-	system ("$blat $db $query $out >& /dev/null");
+	#print $cmd, "\n";
+	my $ret = system ($cmd);
+	Carp::croak "Command has been crashed ($cmd): $?\n" unless $ret == 0;
+
 	my $result = AnnotationIO::readPslFile ($out);
 	unlink $out if -f $out;
 	return $result;

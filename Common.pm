@@ -21,6 +21,7 @@ Aug, 2005
 
 =cut
 
+my $debug = 0;
 
 #get full path from relative path
 use Cwd;
@@ -87,6 +88,24 @@ sub ls
 	return \@files;
 }
 
+#
+sub segmentStr
+{
+	my $str = $_[0];
+	my $colNum = 60;
+	$colNum = $_[1] if @_ > 1;
+	
+	#my ($str, $colNum) = @_;
+	my $strNew = "";
+	while (length ($str) > $colNum)
+	{
+		$strNew .= substr ($str, 0, $colNum) . "\n";
+		$str = substr ($str, $colNum);
+	}
+	$strNew .= $str;
+	return $strNew;
+}
+
 #//////////////////////////Array Manipulation/////////////////////////
 sub bootstrapArray
 {
@@ -113,7 +132,6 @@ diffArray - find set difference of two arrays A\B
 =cut
 
 
-my $debug = 0;
 sub diffArray
 {
 	die "arrayDiff: incorrect number of parameters.\n" if @_!= 2;
@@ -437,6 +455,37 @@ sub contig2genome
 			chromStart=>$genomeStart, 
 			chromEnd=>$genomeEnd};
 }
+
+#genome coordinates to contig coordinates
+#$contig->{chrom=>chr1, chromStart=>2, chromEnd=>3, strand=>4}
+#$zero based coordinates
+#
+sub genome2contig
+{
+	my ($contig, $tsOnGenomeStart, $tsOnGenomeEnd) = @_;
+	my $contigChrom = $contig->{"chrom"};
+	my $contigStart = $contig->{"chromStart"};
+	my $contigEnd = $contig->{"chromEnd"};
+	my $contigStrand = $contig->{"strand"};
+
+	my ($tsOnContigStart, $tsOnContigEnd);
+	if ($contigStrand eq '+')
+	{
+		$tsOnContigStart = $tsOnGenomeStart - $contigStart;
+		$tsOnContigEnd = $tsOnGenomeEnd - $contigStart;
+	}
+	else
+	{
+		$tsOnContigStart = $contigEnd - $tsOnGenomeEnd;
+		$tsOnContigEnd = $contigEnd - $tsOnGenomeStart;
+	}
+	return {chrom=> $contig->{"name"}, 
+			strand=>$contigStrand, 
+			chromStart=>$tsOnContigStart, 
+			chromEnd=>$tsOnContigEnd};
+}
+
+
 
 #base composition
 sub baseComp
@@ -763,8 +812,240 @@ sub waitUntilQsubDone
 	}
 }
 
+#phylogenetic tree manipulation
+#
+
+sub nodeInfo
+{
+	my $node = $_[0];
+	return $node->{"iter"} . "($node)";
+}
+
+sub copyTree
+{
+	my $rootFrom = $_[0];
+	my $rootTo = {};
+
+	$rootTo = $_[1] if (@_ > 1);
+
+	$rootTo->{"iter"} = $rootFrom->{"iter"};
+	$rootTo->{"id"} = $rootFrom->{"id"};
+	$rootTo->{"blen"} = $rootFrom->{"blen"};
+
+	if (exists $rootFrom->{"left"})
+	{
+		
+		my $leftChildTo = {};
+		my $rightChildTo = {};
+		$rootTo->{"left"} = $leftChildTo;
+		$leftChildTo->{"parent"} = $rootTo;
+		copyTree ($rootFrom->{"left"}, $rootTo->{"left"});
+				
+		$rootTo->{"right"} = $rightChildTo;
+		$rightChildTo->{"parent"} = $rootTo;
+		copyTree ($rootFrom->{"right"}, $rootTo->{"right"});
+	}
+	
+	return $rootTo;
+}
+
+sub codeTree
+{
+	my $root = $_[0];
+	my $str = "";
+	$str = $_[1] if (@_ > 1);
+
+	if ($root == 0)
+	{
+		return ""; #empty
+	}
+	if (exists $root->{"left"})
+	{
+		$str .= "(";
+		$str = codeTree ($root->{"left"}, $str);
+		$str .= ",";
+		$str = codeTree ($root->{"right"}, $str);
+		$str .= ")";
+		$str .= ":" . $root->{"blen"} if exists $root->{"parent"};
+	}
+	else #leaf
+	{
+		$str .= $root->{"id"};
+	    $str .=	":" . $root->{"blen"} if exists $root->{"parent"};
+	}
+	return $str;
+}
+
+
+sub getNodes
+{
+	my $root = $_[0];
+	my $nodes = [];
+	$nodes = $_[1] if @_ > 1;
+
+	push @$nodes, $root;
+	if ($root->{"left"})
+	{
+		getNodes ($root->{"left"}, $nodes);
+		getNodes ($root->{"right"}, $nodes);
+	}
+	return $nodes;
+}
+
+#keep only the minimal subtree that covers all the given species 
+sub subTree
+{
+	my ($tree, $species) = @_;
+	#my $treeCpy = copyTree ($tree);
+	my $leaves = getLeafNodes ($tree);
+
+	my %speciesToKeep;
+
+	foreach my $s (@$species)
+	{
+		Carp::croak "species $s does not exist in the tree\n" unless exists $leaves->{$s};
+		$speciesToKeep{$s} = 1;
+	}
+	
+	my @leavesToRm;
+	foreach my $s (keys %$leaves)
+	{
+		push @leavesToRm, $leaves->{$s} unless exists $speciesToKeep{$s};
+	}
+	return removeLeafNodes ($tree, \@leavesToRm);
+}
+
+sub removeSpecies
+{
+	my ($tree, $species) = @_;
+	#my $treeCpy = copyTree ($tree);
+	my $leaves = getLeafNodes ($tree);
+
+	my @leavesToRm;
+	foreach my $s (@$species)
+	{
+		Carp::croak "species $s does not exist in the three\n" unless exists $leaves->{$s};
+		push @leavesToRm, $leaves->{$s}; # if exists $leaves->{$s};
+	}
+	return removeLeafNodes ($tree, \@leavesToRm);
+}
+
+#remove nodes
+sub removeLeafNodes
+{
+	my ($root, $nodes) = @_;
+	
+	my $i = 0;
+	foreach my $n (@$nodes)
+	{
+		Carp::croak "The node is not a leaf node: ", Dumper ($n), "\n" if exists $n->{"left"};
+		
+		print $i++,",  node to remove: ", $n->{"id"}, "\n" if $debug;
+		
+		if (not exists $n->{"parent"})
+		{#single node tree
+			return 0;
+		}
+		elsif (not exists $n->{"parent"}->{"parent"})
+		{
+			#parent is the root
+			my $branch = ($n->{"parent"}->{"left"}->{"iter"} == $n->{"iter"})? 'right' : 'left';
+			
+			$root = $root->{$branch};
+			$root->{"blen"} = 0;
+			delete $root->{"parent"};
+		}
+		elsif ($n->{"parent"}->{"left"}->{"iter"} == $n->{"iter"})
+		{
+			#delete left leaf
+			my $rightSibling = $n->{"parent"}->{"right"};
+			$rightSibling->{"blen"} += $n->{"parent"}->{"blen"};
+			my $grandParent = $n->{"parent"}->{"parent"};
+			
+			my $branch = ($grandParent->{"left"}->{"iter"} == $n->{"parent"}->{"iter"})? 'left' : 'right';
+			$grandParent->{$branch} = $rightSibling;
+			$rightSibling->{"parent"} = $grandParent;
+			
+		}
+		else
+		{
+			#delete right leaf
+			print "delete right leaf\n" if $debug;
+			print "left sibling: ", $n->{"parent"}->{"left"}->{"id"}, "\n" if $debug;
+			my $leftSibling = $n->{"parent"}->{"left"};
+			$leftSibling->{"blen"} += $n->{"parent"}->{"blen"};
+			my $grandParent = $n->{"parent"}->{"parent"};
+			my $branch = ($grandParent->{"left"}->{"iter"} == $n->{"parent"}->{"iter"})? 'left' : 'right';
+			$grandParent->{$branch} = $leftSibling;
+			$leftSibling->{"parent"} = $grandParent;
+		}
+
+		releaseNode ($n->{"parent"}) if exists $n->{"parent"};
+		releaseNode ($n);
+
+		print codeTree ($root), "\n\n" if $debug;
+	}
+	return $root;
+}
+
+sub releaseNode
+{
+	my $node = $_[0];
+	foreach my $k (keys %$node)
+	{
+		delete $node->{$k};
+	}
+	return;
+}
+
+sub releaseTree
+{
+	my $root = $_[0];
+	if (exists $root->{"left"})
+	{
+		releaseTree ($root->{"left"});
+		releaseTree ($root->{"right"});
+	}
+	
+	releaseNode ($root);
+}
+
+sub totalBranchLength
+{
+	my $root = $_[0];
+	print "current node: ", nodeInfo ($root), "id=", $root->{"id"}, ", blen=", $root->{"blen"}, "\n" if $debug;
+	my $tbn = 0;
+	#$root->{"blen"} if exists $root->{"parent"};
+	
+	if (exists $root->{"left"})
+	{
+		$tbn += $root->{"left"}->{"blen"} + totalBranchLength ($root->{"left"});
+		$tbn += $root->{"right"}->{"blen"} + totalBranchLength ($root->{"right"});
+	}
+	
+	#$tbn = $root->{"blen"} if exists $root->{"parent"};
+	return $tbn;
+}
+
+sub getLeafNodes
+{
+	my $root = $_[0];
+	my $nodes = getNodes ($root); 
+	#print Dumper ($nodes), "\n";
+	my %leaves;
+	foreach my $n (@$nodes)
+	{
+		if (not exists $n->{"left"})
+		{
+			Carp::croak "no id for leaf node ", Dumper ($n), "\n" unless exists $n->{"id"} && $n->{"id"} ne '';
+			$leaves{$n->{"id"}} = $n;
+		}
+	}
+	return \%leaves;
+}
+
+
 
 
 1;
-
 

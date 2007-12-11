@@ -20,6 +20,9 @@ BED file
 
 #zero-based coordinates
 #
+
+my $debug = 0;
+
 sub readBedFile
 {
 	my $in = $_[0];
@@ -73,6 +76,29 @@ sub readBedFile
 	}
 	close ($fd);
 	return $out;
+}
+
+
+sub gene2exon
+{
+    my $g = $_[0];
+    my $nexon = $g->{"blockCount"};
+    my @exons;
+    for (my $i = 0; $i < $nexon; $i++)
+    {
+        my $exonStart = $g->{"chromStart"} + $g->{"blockStarts"}->[$i];
+        my $exonEnd = $exonStart + $g->{"blockSizes"}->[$i] - 1;
+        my $e = {
+            chrom => $g->{"chrom"},
+            chromStart=> $exonStart,
+            chromEnd => $exonEnd,
+            name => join (":", $g->{"name"}, $i),
+            score => $g->{"score"},
+            strand => $g->{"strand"}
+        };
+        push @exons, $e;
+    }
+    return \@exons;
 }
 
 
@@ -1393,6 +1419,217 @@ sub readCelFile
 	close ($fin);
 	return \%ret;	
 }
+
+
+
+
+sub readTreeFile
+{
+	my $in = $_[0];
+	my $fin = new FileHandle;
+	open ($fin, "<$in") || Carp::croak "can not open file $in to read\n";
+
+	my $treeStr = "";
+	
+	while (my $line = <$fin>)
+	{
+		chomp $line;
+		next if $line =~/^\s*$/;
+		$line =~s/\s//g;
+
+		$treeStr .= $line;
+	}
+	close ($fin);
+	chop $treeStr if ($treeStr =~/\;$/);
+
+	my $tokens = segmentToken ($treeStr);
+	
+	return parseTree ($tokens);
+}
+
+sub writeTreeFile
+{
+	my ($tree, $out) = @_;
+	my $treeStr = Common::codeTree ($tree);
+	my $fout = new FileHandle;
+	open ($fout, ">$out") || Carp::croak "can not open file $out to  write\n";
+
+	print $fout $treeStr, ";\n";
+
+	close ($fout);
+}
+
+sub segmentToken
+{
+	my $treeStr = $_[0];
+	
+	##segment the tree text
+	my @tokens; #= split (/\(|\,|\)/, $treeStr);
+	
+	my $tok = "";
+	for (my $i = 0; $i < length ($treeStr); $i++)
+	{
+		my $c = substr($treeStr, $i, 1);
+		if ($c eq '(')
+		{
+			push @tokens, $c;
+		}
+		elsif ($c eq ',')
+		{
+			push @tokens, $tok;
+			push @tokens, $c;
+			$tok = '';
+		}
+		elsif ($c eq ')')
+		{
+			push @tokens, $tok;
+			push @tokens, $c;
+			$tok = "";
+		}
+		else
+		{
+			$tok .= $c;
+		}
+	}
+	if ($tok ne '')
+	{
+		push @tokens, $tok;
+	}
+	push @tokens, ";";
+	return \@tokens;
+}
+
+
+sub parseTree
+{
+	my $tokens = $_[0];
+	my @tokens = @$tokens;
+
+	if (@tokens == 2)
+	{
+		return {iter => 0, id=>$tokens[0], blen=> 0};
+	}
+	
+	my @nodes;
+	
+	my $root = {iter=> 0, id=>"", blen=> 0};
+	push @nodes, $root;
+	
+	my $nodeIter = 1;
+	my $currIter = $root->{"iter"};
+	
+	foreach my $tok (@tokens)
+	{
+	
+		if ($tok eq '(')
+		{
+			my $leftChild = {iter=>$nodeIter++, parent=>$nodes[$currIter]};
+			my $rightChild = {iter=>$nodeIter++, parent=>$nodes[$currIter]};
+			push @nodes, $leftChild;
+			push @nodes, $rightChild;
+			
+			$nodes[$currIter]->{"left"} = $leftChild;
+			$nodes[$currIter]->{"right"} = $rightChild;
+
+			print "tok = $tok, curr node = ", nodeInfo ($nodes[$currIter]), ", branch and go left child ", nodeInfo ($leftChild), "\n" if $debug;
+			$currIter = $nodes[$currIter]->{"left"}->{"iter"};
+		
+		}
+		elsif ($tok eq ',')
+		{
+			Carp::croak "no right sibling for node ", $nodes[$currIter]->{"iter"}, "\n" unless exists $nodes[$currIter]->{"parent"} && exists $nodes[$currIter]->{"parent"}->{"right"};
+		
+			print "tok = $tok, curr node = ", nodeInfo ($nodes[$currIter]), ", jump to right sibling ", nodeInfo ($nodes[$currIter]->{"parent"}->{"right"}), "\n" if $debug;
+			$currIter = $nodes[$currIter]{"parent"}->{"right"}->{"iter"};
+		}
+		elsif ($tok eq ')')
+		{
+			#if ($currIter == 0) #done
+			#{
+			#	print "tok = $tok, curr node = ", nodeInfo ($nodes[$currIter]), ", done\n";
+			#	return $root;
+			#}
+			Carp::croak "no parent for node ", $nodes[$currIter]->{"iter"}, "\n" unless exists $nodes[$currIter]->{"parent"};
+
+			print "tok = $tok, curr node = ", nodeInfo ($nodes[$currIter]), ", jump to parent ", nodeInfo ($nodes[$currIter]->{"parent"}), "\n" if $debug;
+			$currIter = $nodes[$currIter]->{"parent"}->{"iter"};
+		}
+		elsif ($tok eq ';')
+		{
+			print "tok = $tok, curr node = ", nodeInfo ($nodes[$currIter]), ", done\n" if $debug;
+			#$root->{"nodes"} = \@nodes;
+			return $root;
+		}
+		else
+		{
+			my ($id, $blen) = split (/\:/, $tok);
+			$nodes[$currIter]->{"id"} = $id;
+			$nodes[$currIter]->{"blen"} = $blen;
+
+			print "tok = $tok, curr node = ", nodeInfo ($nodes[$currIter]), ", assign label $tok\n" if $debug;
+		}
+	}
+}
+
+#need more test
+sub parseTreeRecursive
+{
+	my ($tokens, $currNode, $nodeIter) = @_;
+
+	my @tokens = @$tokens;
+
+	my $tok = shift @tokens;
+	
+	if ($tok eq '(')
+	{
+		my $leftChild = {iter=>$nodeIter++, parent=>$currNode};
+		my $rightChild = {iter=>$nodeIter++, parent=>$currNode};
+			
+		$currNode->{"left"} = $leftChild;
+		$currNode->{"right"} = $rightChild;
+
+		print "curr node = ", nodeInfo ($currNode), ", branch and go left child ", nodeInfo ($leftChild), "\n" if $debug;
+		
+		parseTree (\@tokens, $leftChild, $nodeIter);
+	}
+	elsif ($tok eq ',')
+	{
+		Carp::croak "no right sibling for node ", $currNode->{"iter"}, "\n" unless exists $currNode->{"parent"} && exists $currNode->{"parent"}->{"right"};
+		
+		print "curr node = ", nodeInfo ($currNode), ", jump to right sibling ", nodeInfo ($currNode->{"parent"}->{"right"}), "\n" if $debug;
+		parseTree (\@tokens, $currNode->{"parent"}->{"right"}, $nodeIter);
+	}
+	elsif ($tok eq ')')
+	{
+		if (@tokens == 0) #done
+		{
+		print "curr node = ", nodeInfo ($currNode), ", done\n";
+		return;
+		}
+		Carp::croak "no parent for node ", $currNode->{"iter"}, "\n" unless exists $currNode->{"parent"};
+
+		print "curr node = ", nodeInfo ($currNode), ", jump to parent ", nodeInfo ($currNode->{"parent"}), "\n" if $debug;
+	    parseTree (\@tokens, $currNode->{"parent"}, $nodeIter);
+	}
+	else
+	{
+		my ($id, $blen) = split (/\:/, $tok);
+		$currNode->{"id"} = $id;
+		$currNode->{"blen"} = $blen;
+
+		print "curr node = ", nodeInfo ($currNode), ", assign label $tok\n" if $debug;
+		parseTree (\@tokens, $currNode, $nodeIter);
+	}
+}
+
+
+
+sub nodeInfo
+{
+    my $node = $_[0];
+    return $node->{"iter"} . "($node)";
+}
+		
 
 
 1;

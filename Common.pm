@@ -639,6 +639,126 @@ sub blat
 }
 
 
+sub checkSim4AlignQuality
+{
+	my ($aligns, $gene, $coverage, $identity, $verbose) = @_;
+	my @goodAligns;
+	
+	foreach my $a (@$aligns)
+	{
+		#print "align = ", Dumper ($a), "\n";
+
+		my @seq1blocks = @{$a->{"seq1blocks"}};#genomic
+		my @seq2blocks = @{$a->{"seq2blocks"}};#transcript
+		my @blockscore = @{$a->{"blockscore"}};
+		
+		my $nblocks = @{$a->{"seq2blocks"}};
+		if ($nblocks < 2)
+		{
+			print "gene=$gene vs transcript=", $a->{"seq2id"}, ": no splice junction spaned, failed\n" if $verbose;
+			next;
+		}
+		
+		#OK now we have at least two blocks, so there should be no error in the following
+		#code to check the first and last blocks
+	
+		#remove the first block if less than 25 nt
+		my $firstBlockSize = $seq1blocks[0]->{"end"} - $seq1blocks[0]->{"start"} + 1;
+		
+		#############################################################
+		#TO BE FIXIED
+		#use the while loop in the next version
+		#
+		#############################################################
+		#
+		#while ($nblocks >= 2 && $firstBlockSize < 25)
+		if ($firstBlockSize < 25)
+		{
+			$a->{"match"} -= $firstBlockSize;
+			$a->{"identity"} -= $firstBlockSize * $blockscore[0] / 100;
+			shift @seq1blocks;
+			shift @seq2blocks;
+			shift @blockscore;
+			$nblocks -= 1;
+			#$firstBlockSize = $seq1blocks[0]->{"end"} - $seq1blocks[0]->{"start"} + 1;
+		}
+		
+		#remove the last block if less than 25 nt 
+		my $lastBlockSize = $seq1blocks[$nblocks-1]->{"end"} - $seq1blocks[$nblocks-1]->{"start"} + 1;
+		
+
+		#############################################################
+		#TO BE FIXIED
+		#use the while loop in the next version
+		#
+		#############################################################
+		#
+		
+		#while ($nblocks >= 2 && $lastBlockSize < 25)
+		if ($lastBlockSize < 25)
+		{
+			$a->{"match"} -= $lastBlockSize;
+			$a->{"identity"} -= $lastBlockSize * $blockscore[$nblocks - 1] / 100;
+			pop @seq1blocks;
+			pop @seq2blocks;
+			pop @blockscore;
+			$nblocks -= 1;
+			#$lastBlockSize = $seq1blocks[$nblocks-1]->{"end"} - $seq1blocks[$nblocks-1]->{"start"} + 1;
+		}
+		
+		if ($nblocks < @{$a->{"seq2blocks"}})
+		{
+			$a->{"seq1blocks"} = \@seq1blocks;
+			$a->{"seq2blocks"} = \@seq2blocks;
+			$a->{"blockscore"} = \@blockscore;
+		}
+		
+		#make sure we still have at least two blocks
+		$nblocks = @{$a->{"seq2blocks"}};
+		if ($nblocks < 2)
+		{
+			print "gene=$gene vs transcript=", $a->{"seq2id"}, ": no splice junction spaned, failed\n" if $verbose;
+			next;
+		}
+		
+		#check coverage and identity
+		my $cov = $a->{"match"} / $a->{'seq2len'}; 	#percent coverage
+		my $id = $a->{"identity"} / $a->{"match"};	#percent identity
+		
+		if ($cov < $coverage || $id < $identity)
+		{
+			print "gene=$gene vs transcript=", $a->{"seq2id"}, ": coverage=$cov, identity=$id, failed\n" if $verbose;
+			next;
+		}
+
+		my $contineous = 1;
+		my $tsblocks = $a->{"seq2blocks"};
+		for (my $i = 0; $i < $nblocks - 1; $i++)
+		{
+			if ($tsblocks->[$i]->{"end"} + 1 != $tsblocks->[$i+1]->{"start"})
+			{
+				$contineous = 0;
+				last;
+			}
+		}
+		
+		if ($contineous != 1)
+		{
+			print "gene=$gene vs transcript=", $a->{"seq2id"}, ": gaps in transcript, failed\n" if $verbose;
+			next;
+		}
+
+		push @goodAligns, $a;
+	}
+
+	my $n = @goodAligns;
+	my $ntotal = @$aligns;
+	
+	print "$n of $ntotal aligned transcripts passed quality control\n" if $verbose;
+	
+	return \@goodAligns;
+}
+
 #Convert count matrix to stormo matrix
 #see AnnotationIO for the data structure of matrix
 #

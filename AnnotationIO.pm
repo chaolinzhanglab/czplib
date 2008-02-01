@@ -1159,6 +1159,7 @@ sub readsim4File
 			$match += ($2 - $1 + 1);
 			$identity += ($2 - $1 + 1) * $5;
 		}
+		#elsif ($line =~/^\s+\d+ 
 		else
 		{
 			Carp::croak "$in has been disrupted\n$line\n";
@@ -1196,7 +1197,7 @@ sub printSim4Align
 	my $nblocks = @$seq1blocks;
 	for (my $i = 0; $i < $nblocks; $i++)
 	{
-		print      ($seq1blocks->[$i]->{"start"} + 1) . "-" . ($seq1blocks->[$i]->{"end"} + 1) . "\t";
+		print	"", ($seq1blocks->[$i]->{"start"} + 1), "-", ($seq1blocks->[$i]->{"end"} + 1), "\t";
 		print "(", ($seq2blocks->[$i]->{"start"} + 1), "-", ($seq2blocks->[$i]->{"end"} + 1), ")\t";
 		print  $align->{"blockscore"}->[$i], "%", "\n";
 	}

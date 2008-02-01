@@ -7,7 +7,7 @@ package MyConfig;
 use strict;
 
 
-my $projHome = "/mnt/raygun/zhangc";
+my $projHome = "/home5/zhang1/zhangc/proj";
 
 sub getDefaultCache
 {

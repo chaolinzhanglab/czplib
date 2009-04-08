@@ -3,7 +3,7 @@
 #
 # IO manipulation of microarray data
 #!/usr/bin/perl -w
-package arrayIO;
+package Microarray::arrayIO;
 
 use strict;
 use FileHandle;

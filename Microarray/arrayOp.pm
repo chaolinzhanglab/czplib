@@ -3,10 +3,11 @@
 #
 # Manipulation of microarray data
 #!/usr/bin/perl -w
-package arrayOp;
+package Microarray::arrayOp;
 
 use strict;
 use Common;
+use Carp;
 
 #@subArrayMat@
 #@Input:
@@ -24,11 +25,12 @@ sub subArrayMat
 	my $arrayIdx = $_[1];
 	my $geneIdx = $_[2];
 	
+	#Carp::croak join ("\t", @$geneIdx), "\n";
 	my $arrayNew;
 	$arrayNew->{"hasCls"} = $array->{"hasCls"};
 	$arrayNew->{"arrayN"} = @$arrayIdx;
 	$arrayNew->{"geneN"} = @$geneIdx;
-#	print "array=", $arrayNew->{"arrayN"}, "\t gene=", $arrayNew->{"geneN"}, "\n";
+	#print "array=", $arrayNew->{"arrayN"}, "\t gene=", $arrayNew->{"geneN"}, "\n";
 	
 	die "subArrayMat: incorrect parameters.\n" if ($arrayNew->{"arrayN"} <= 0 || $arrayNew->{"geneN"} <= 0);
 	my $arrayNameTmp = $array->{"arrayNames"};
@@ -140,7 +142,7 @@ sub delArray
 	
 	$arrayIdx = Common::diffArray (\@arrayIdxAll, $arrayIdx);
 	
-	my @geneIdx = (0..($array->{"arrayN"} - 1));
+	my @geneIdx = (0..($array->{"geneN"} - 1));
 	my $arrayNew = subArrayMat ($array, $arrayIdx, \@geneIdx);
 	return $arrayNew; 
 }	

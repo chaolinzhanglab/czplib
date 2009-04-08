@@ -26,56 +26,78 @@ my $debug = 0;
 sub readBedFile
 {
 	my $in = $_[0];
+
+	my $verbose = 0;
+
+	if (@_ > 1)
+	{
+		$verbose = $_[1];
+	}
+	
 	my $out = [];
 	my $fd = new FileHandle;
 	
 	open ($fd, "<$in")||Carp::croak "can not open file $in to read\n";
-	my $line;
-	while ($line = <$fd>)
+	my $i = 0;
+	
+	while (my $line = <$fd>)
 	{
 		next if $line =~/^\s*$/;
 		next if $line =~/^\#/;
 		next if $line =~/^track name\=/;
-		my @cols = split (/\s+/, $line);
-		Carp::croak "less than three columns in $in\n" if @cols < 3;
-		
-		#	print join ("\t", @cols), "\n";
-		my @colNames = qw (chrom chromStart chromEnd name score strand thickStart thickEnd itemRgb blockCount blockSizes blockStarts);
-		my $i;
-		my $entry;
-		for ($i = 0; $i < @colNames; $i++)
-		{
-			last if ($#cols < $i);
-			$entry->{$colNames[$i]} = $cols[$i];
-		}
 
-		if (exists $entry->{"blockSizes"})
-		{
-			my $blockSizes = $entry->{"blockSizes"};
-			my @bs = split (/\,/, $blockSizes);
-			Carp::croak "in correct number of blocks at line $line\n" if $#bs != $entry->{"blockCount"} - 1;
-			$entry->{"blockSizes"} = \@bs;
-		}
+		print "$i ...\n" if $verbose && int ($i / 10000) * 10000 - $i == 0;
+		$i++;
 
-		if (exists $entry->{"blockStarts"})
-		{
-			my $blockStarts = $entry->{"blockStarts"};
-			my @bs = split (/\,/, $blockStarts);
-			Carp::croak "in correct number of blocks at line $line\n" if $#bs != $entry->{"blockCount"} - 1;
-			$entry->{"blockStarts"} = \@bs;
-		}
-		
-		$entry->{"chromEnd"} -= 1;
-		$entry->{"thickEnd"} -= 1 if (exists $entry->{"thickEnd"});
-		
-		Carp::croak "chromStart (" . $entry->{"chromStart"} . ")  > chromEnd (" . $entry->{"chromEnd"} . ")\n" 
-		if ($entry->{"chromStart"} > $entry->{"chromEnd"});
-		
+		my $entry = line2bed ($line);
 		#print join ("\t", $entry->{"chromStart"}, $entry->{"chromEnd"}), "\n";
 		push @$out, $entry;
 	}
 	close ($fd);
 	return $out;
+}
+
+sub line2bed
+{
+	my $line = $_[0];
+
+	my @cols = split (/\s+/, $line);
+	Carp::croak "less than three columns in line: $line\n" if @cols < 3;
+	
+	#	print join ("\t", @cols), "\n";
+	my @colNames = qw (chrom chromStart chromEnd name score strand thickStart thickEnd itemRgb blockCount blockSizes blockStarts);
+	my $i;
+	my $entry = {};
+	for ($i = 0; $i < @colNames; $i++)
+	{
+		last if ($#cols < $i);
+		$entry->{$colNames[$i]} = $cols[$i];
+	}
+
+	if (exists $entry->{"blockSizes"})
+	{
+		my $blockSizes = $entry->{"blockSizes"};
+		my @bs = split (/\,/, $blockSizes);
+		Carp::croak "in correct number of blocks at line $line\n" if $#bs != $entry->{"blockCount"} - 1;
+		$entry->{"blockSizes"} = \@bs;
+	}
+
+	if (exists $entry->{"blockStarts"})
+	{
+		my $blockStarts = $entry->{"blockStarts"};
+		my @bs = split (/\,/, $blockStarts);
+		Carp::croak "in correct number of blocks at line $line\n" if $#bs != $entry->{"blockCount"} - 1;
+		$entry->{"blockStarts"} = \@bs;
+	}
+		
+	$entry->{"chromEnd"} -= 1;
+	$entry->{"thickEnd"} -= 1 if (exists $entry->{"thickEnd"});
+		
+	Carp::croak "chromStart (" . $entry->{"chromStart"} . ")  > chromEnd (" . $entry->{"chromEnd"} . ")\n" 
+	if ($entry->{"chromStart"} > $entry->{"chromEnd"});
+		
+		#print join ("\t", $entry->{"chromStart"}, $entry->{"chromEnd"}), "\n";
+	return $entry;
 }
 
 
@@ -102,9 +124,10 @@ sub gene2exon
 }
 
 
+
 sub readPslFile
 {
-	my $in = $_[0];
+	my ($in, $verbose) = @_;
 	
 	my $fin = new FileHandle;
 	my @results;
@@ -126,6 +149,7 @@ sub readPslFile
 
 	#now ready to go
 	
+	my $i = 0;
 	while ($line =<$fin>)
 	{
 		chomp $line;
@@ -137,7 +161,9 @@ sub readPslFile
 		
 		#print join ("|\n", @cols), "|\n";
 		Carp::croak ("the number of columns is incorrect\n") if $#cols != 20;
-		
+
+		$i++;
+		print "$i ...\n" if $verbose && $i % 10000 == 0;		
 		my @blockSizes = split (/\,/, $cols[18]); #pop @blockSizes;
 		my @qStarts = split (/\,/, $cols[19]); #pop @qStarts;
 		#print "qStarts=", join ("|\t|", @qStarts), "|\n";
@@ -346,12 +372,105 @@ sub writeBedFile
 }
 
 
+sub splitBedFilebyChrom
+{
+	my ($inBedFile, $outDir, $verbose) = @_;
+
+	Carp::croak "$inBedFile does not exist\n" unless -f $inBedFile;
+	Carp::croak "$outDir does not exist\n" unless -d $outDir;
+
+	my %tagCount;
+
+	my $fin = new FileHandle;
+	#print "reading tags from $inBedFile ...\n" if $verbose;
+	open ($fin, "<$inBedFile") || Carp::croak "can not open file $inBedFile to read\n";
+
+	#my %tagCount;
+	#write tags according to chromosomes
+	my $i = 0;
+	my %fhHash;
+	while (my $line = <$fin>)
+	{
+		chomp $line;
+		next if $line=~/^\s*$/;
+		next if $line=~/^track name/;
+	
+		$i++;
+
+		print "$i ...\n" if $i - int ($i / 50000) * 50000 == 0 && $verbose;
+	
+		$line =~/(\S+)\t/;
+
+		my $chrom = $1;
+		#print "chrom = $chrom\n";
+		my $tmpFile = "$outDir/$chrom.bed";
+	
+		if (not exists $fhHash{$chrom})
+		{
+			my $fout = new FileHandle;
+			open ($fout, ">>$tmpFile") || Carp::croak "can not open file $tmpFile to write\n";
+			$fhHash{$chrom} = $fout;
+		}
+	
+		#open ($fout, ">>$tmpFile") || Carp::croak "can not open file $tmpFile to write\n";
+	
+		my $fout = $fhHash{$chrom};
+		print $fout $line, "\n";
+		#close ($fout);
+
+		if (exists $tagCount{$chrom})
+		{
+			$tagCount{$chrom}->{"n"} ++;
+		}
+		else
+		{
+			$tagCount{$chrom} = {f=>"$outDir/$chrom.bed", n=> 1};
+		}
+	}
+	close ($fin);
+	#close all file handles
+	foreach my $chrom (keys %fhHash)
+	{
+		close ($fhHash{$chrom});
+	}
+
+	return \%tagCount;
+}
+
+#expend to 12 column format
+sub bed2Full
+{
+	my $region = $_[0];
+	Carp::croak "at least three columns should exist\n" 
+	unless exists $region->{"chrom"} && exists $region->{"chromStart"} && exists $region->{"chromEnd"};
+	
+	$region->{"name"} = $region->{"chrom"} . ":" . $region->{"chromStart"} . "-" . ($region->{"chromEnd"} + 1)
+	unless exists $region->{"name"};
+
+	$region->{"score"} = 0 unless exists $region->{"score"};
+	$region->{"strand"} = "+" unless exists $region->{"strand"};
+
+	$region->{"thickStart"} = $region->{"chromStart"} unless exists $region->{"thickStart"};
+	$region->{"thickEnd"} = $region->{"chromEnd"} unless exists $region->{"thickEnd"};
+	$region->{"itemRgb"} = "0,0,0" unless exists $region->{"itemRgb"};
+
+	$region->{"blockCount"} = 1 unless exists $region->{"blockCount"};
+	my @blockSizes = ($region->{"chromEnd"} - $region->{"chromStart"} + 1);
+	$region->{"blockSizes"} = \@blockSizes unless exists $region->{"blockSizes"};
+	
+	my @blockStarts = (0);
+	$region->{"blockStarts"} = \@blockStarts unless exists $region->{"blockStarts"};
+
+	return $region;
+}
+
 sub printBedRegion
 {
 	my $region = $_[0];
 	my $str = printBedRegionToString ($region);
 	print $str, "\n";
 }
+
 
 #generate bed format into string
 sub printBedRegionToString
@@ -360,7 +479,7 @@ sub printBedRegionToString
 	
 	my @colNames = qw (chrom chromStart chromEnd name score strand thickStart thickEnd itemRgb blockCount blockSizes blockStarts);
 	
-	my $colNum = keys %$region;
+	my $colNum = 12; #keys %$region;
 	
 	my %rCopy = %$region;
 	$rCopy{"chromEnd"} += 1;
@@ -388,7 +507,8 @@ sub printBedRegionToString
 		}
 		else
 		{
-			Carp::croak "col=$col is not defined\n"; 
+			last;
+			#Carp::croak "col=$col is not defined\n"; 
 		}
 	}
 	return $ret;
@@ -1086,6 +1206,31 @@ sub writeFastaSeq
 
 #assume seq1 is genomic sequence
 #seq2 is transcript (from a db)
+
+sub _splitSim4AlignText
+{
+	my ($seq1Text, $matchText, $seq2Text) = @_;
+	
+	my @seq1blocksText;
+	my @matchBlocksText;
+	my @seq2blocksText;
+
+	my $start = 0;
+	while ($matchText =~/\>\>\>\.\.\.\>\>\>/g)
+	{
+		push @seq1blocksText, substr ($seq1Text, $start, pos($matchText) - 9 - $start);
+		push @matchBlocksText, substr ($matchText, $start, pos($matchText) - 9 - $start);
+		push @seq2blocksText, substr ($seq2Text, $start, pos($matchText) - 9 - $start);
+		$start = pos($matchText);
+	}
+	
+	push @seq1blocksText, substr ($seq1Text, $start);
+	push @matchBlocksText, substr ($matchText, $start);
+	push @seq2blocksText, substr ($seq2Text, $start);
+
+	return {seq1text=>\@seq1blocksText, matchtext=>\@matchBlocksText, seq2text=>\@seq2blocksText};
+}
+
 sub readsim4File
 {
 	my $in = $_[0];
@@ -1097,6 +1242,11 @@ sub readsim4File
 	my $seq2blocks = [];
 	my $blockscore = [];
 	
+	my $alignText = 0;
+	my $alignSeq1 = "";
+	my $alignMatch = "";
+	my $alignSeq2 = "";
+
 	my $match = 0; #total length of matches
 	my $identity = 0; #number of correct bases
 	
@@ -1112,12 +1262,82 @@ sub readsim4File
 			if (@$seq1blocks > 0)
 			{
 				$identity = int ($identity/100 + 0.5);
-				push @ret, {seqfile1=>$seq1, seqfile2=>$seq2, seq2id=>$seq2id, 
+				Carp::croak "inconsistency found near line $line\n"
+				unless length ($alignSeq1) == length ($alignMatch) && length ($alignSeq2) == length ($alignMatch);
+				
+				my $item = {seqfile1=>$seq1, seqfile2=>$seq2, seq2id=>$seq2id, 
 						seq1len=>$seq1len, seq2len=>$seq2len,
 						match=> $match, identity=>$identity, strand=>$strand, 
 						seq1blocks=>$seq1blocks,
 						seq2blocks=>$seq2blocks,
 						blockscore=>$blockscore};
+
+				if (length ($alignSeq1) > 0)
+				{
+					my $align = _splitSim4AlignText ($alignSeq1, $alignMatch, $alignSeq2);
+					$item->{"seq1text"} = $align->{"seq1text"};
+					$item->{"matchtext"} = $align->{"matchtext"};
+					$item->{"seq2text"} = $align->{"seq2text"};
+
+					my $nblock = @{$align->{"seq1text"}};
+					if ($nblock != @{$item->{"seq1blocks"}})
+					{
+						print "inconsistent block number for gene = $seq1, acc = $seq2id\n"; 
+						print Dumper ($item), "\n";
+						
+						$seq2 = "";
+						$seq2id = "";
+						$seq2len = 0;
+						$seq1blocks = [];
+						$seq2blocks = [];
+						$blockscore = [];
+						$match = 0;
+						$identity = 0;
+						$strand = '+';
+						$alignText = 0;
+						$alignSeq1 = "";
+						$alignSeq2 = "";
+						$alignMatch = "";
+	
+						next;
+					}
+
+
+					for (my $i = 0; $i < $nblock; $i++)
+					{
+						my $b1Len = $seq1blocks->[$i]->{"end"} - $seq1blocks->[$i]->{"start"} + 1;
+						my $b2Len = $seq2blocks->[$i]->{"end"} - $seq2blocks->[$i]->{"start"} + 1;
+						my $b1Text = $align->{"seq1text"}->[$i];
+						my $b2Text = $align->{"seq2text"}->[$i];
+
+						$b1Text=~s/\s//g;
+						$b2Text=~s/\s//g;
+
+						if ($b1Len != length ($b1Text) || $b2Len != length ($b2Text))
+						{
+							print "inconsistency size of block $i: seq1 = $b1Len, seq1text = ", length ($b1Text), ", seq2=$b2Len, seq2text=", length($b2Text), "\n";
+							print Dumper ($item), "\n";
+						
+							$seq2 = "";
+							$seq2id = "";
+							$seq2len = 0;
+							$seq1blocks = [];
+							$seq2blocks = [];
+							$blockscore = [];
+							$match = 0;
+							$identity = 0;
+							$strand = '+';
+							$alignText = 0;
+							$alignSeq1 = "";
+							$alignSeq2 = "";
+							$alignMatch = "";
+	
+							next;
+						}
+					}
+				}
+					
+				push @ret, $item;
 			}
 			
 			$line=~/\=\s+(\S+)\,\s(\d+)\sbp$/;
@@ -1133,6 +1353,10 @@ sub readsim4File
 			$match = 0;
 			$identity = 0;
 			$strand = '+';
+			$alignText = 0;
+			$alignSeq1 = "";
+			$alignSeq2 = "";
+			$alignMatch = "";
 		}
 		elsif ($line=~/^seq2/)
 		{
@@ -1159,7 +1383,30 @@ sub readsim4File
 			$match += ($2 - $1 + 1);
 			$identity += ($2 - $1 + 1) * $5;
 		}
-		#elsif ($line =~/^\s+\d+ 
+		elsif ($line =~/^\s*\d+\s/)
+		{
+			$alignText = 1;
+			
+			#do not want to chop space in the end
+			$line = <$fin>;
+			chop $line;
+			$line =~/^\s*\d+\s(.*?)$/;
+			$alignSeq1 .= $1;
+			my $textLen = length ($1);
+			
+			$line = <$fin>;
+			chop $line;
+			$line =~/^\s*(\S.*?)$/;
+			
+			my $spaceLen = $textLen - length ($1);
+			
+			$alignMatch .= "" . (" "x $spaceLen) . $1;
+		
+			$line = <$fin>;
+			chop $line;
+			$line =~/^\s*\d+\s(.*?)$/;
+			$alignSeq2 .= $1;
+		}
 		else
 		{
 			Carp::croak "$in has been disrupted\n$line\n";
@@ -1168,13 +1415,81 @@ sub readsim4File
 	if (@$seq2blocks > 0)
 	{
 		$identity = int ($identity/100 + 0.5);
-		push @ret, {seqfile1=>$seq1, seqfile2=>$seq2, seq2id=>$seq2id, 
+		Carp::croak "inconsistency found near file end\n"
+		unless length ($alignSeq1) == length ($alignMatch) && length ($alignSeq2) == length ($alignMatch);
+				
+		my $item = {seqfile1=>$seq1, seqfile2=>$seq2, seq2id=>$seq2id, 
 			seq1len=>$seq1len, seq2len=>$seq2len,
-			match=> $match, identity=>$identity, strand=>$strand,
+			match=> $match, identity=>$identity, strand=>$strand, 
 			seq1blocks=>$seq1blocks,
 			seq2blocks=>$seq2blocks,
 			blockscore=>$blockscore};
-		
+
+		if (length ($alignSeq1) > 0)
+		{
+			my $align = _splitSim4AlignText ($alignSeq1, $alignMatch, $alignSeq2);
+
+			my $nblock = @{$align->{"seq1text"}};
+			$item->{"seq1text"} = $align->{"seq1text"};
+			$item->{"matchtext"} = $align->{"matchtext"};
+			$item->{"seq2text"} = $align->{"seq2text"};
+
+			if ($nblock != @{$item->{"seq1blocks"}})
+			{
+				print "inconsistent block number for gene = $seq1, acc = $seq2id\n"; 
+				print Dumper ($item), "\n";
+
+				$seq2 = "";
+				$seq2id = "";
+				$seq2len = 0;
+				$seq1blocks = [];
+				$seq2blocks = [];
+				$blockscore = [];
+				$match = 0;
+				$identity = 0;
+				$strand = '+';
+				$alignText = 0;
+				$alignSeq1 = "";
+				$alignSeq2 = "";
+				$alignMatch = "";
+	
+				next;
+			}
+
+			for (my $i = 0; $i < $nblock; $i++)
+			{
+				my $b1Len = $seq1blocks->[$i]->{"end"} - $seq1blocks->[$i]->{"start"} + 1;
+				my $b2Len = $seq2blocks->[$i]->{"end"} - $seq2blocks->[$i]->{"start"} + 1;
+				my $b1Text = $align->{"seq1text"}->[$i];
+				my $b2Text = $align->{"seq2text"}->[$i];
+
+				$b1Text=~s/\s//g;
+				$b2Text=~s/\s//g;
+				if ($b1Len != length ($b1Text) || $b2Len != length ($b2Text))
+				{
+					print "inconsistency size of block $i: seq1 = $b1Len, seq1text = ", length ($b1Text), ", seq2=$b2Len, seq2text=", length($b2Text), "\n"; 
+					print Dumper ($item), "\n";
+					
+					$seq2 = "";
+					$seq2id = "";
+					$seq2len = 0;
+					$seq1blocks = [];
+					$seq2blocks = [];
+					$blockscore = [];
+					$match = 0;
+					$identity = 0;
+					$strand = '+';
+					$alignText = 0;
+					$alignSeq1 = "";
+					$alignSeq2 = "";
+					$alignMatch = "";
+	
+					next;
+				}
+			}
+		}
+					
+		push @ret, $item;
 	}
 			
 	close ($fin);
@@ -1238,9 +1553,46 @@ sub sim4ToBed
 			blockSizes=>\@blockSizes,
 			blockStarts=>\@blockStarts};
 	return $region;
+	#removeSmallGap ($region, 0);
 }
 
 
+sub removeSmallGap
+{
+	my ($r, $gapSize) = @_;
+	return $r unless exists $r->{"blockCount"} && $r->{"blockCount"} > 1;
+
+	my @blockStarts;
+	my @blockSizes;
+
+	my $currBlockStart = 0; 
+	my $currBlockSize = $r->{"blockSizes"}->[0];
+
+	for (my $i = 1; $i < @{$r->{"blockStarts"}}; $i++)
+	{
+		my $currBlockEnd = $currBlockStart + $currBlockSize - 1;
+		if ($r->{"blockStarts"}->[$i] > $currBlockEnd + $gapSize + 1) # a new block
+		{
+			push @blockStarts, $currBlockStart;
+			push @blockSizes, $currBlockSize;
+			$currBlockStart = $r->{"blockStarts"}->[$i];
+			$currBlockSize = $r->{"blockSizes"}->[$i];
+		}
+		else
+		{
+			#extend the current block
+			$currBlockSize = $r->{"blockStarts"}->[$i] + $r->{"blockSizes"}->[$i] - $currBlockStart;
+		}
+	}
+	push @blockStarts, $currBlockStart;
+	push @blockSizes, $currBlockSize;
+	
+	$r->{"blockCount"} = @blockStarts;
+	$r->{"blockSizes"} = \@blockSizes;
+	$r->{"blockStarts"} = \@blockStarts;
+
+	return $r;
+}
 
 
 
@@ -1421,6 +1773,46 @@ sub readCelFile
 	return \%ret;	
 }
 
+
+sub readRNAplfoldFile
+{
+	my $inFile = $_[0];
+
+	my $fin = new FileHandle;
+	open ($fin, "<$inFile") || Carp::croak "can not open file $inFile to read\n";
+
+	my @ret;
+	my $seqLen = -1;
+	while (my $line = <$fin>)
+	{
+		chomp $line;
+		next if $line=~/^\s*$/;
+
+		if ($line =~/^\/sequence \{/)
+		{
+			my $seq = <$fin>;
+			chomp $seq;
+			$seqLen = length ($seq) - 1;
+
+			#print "seqlen = $seqLen\n";
+			for (my $i = 0; $i < $seqLen; $i++)
+			{
+				$ret[$i] = 0;
+			}
+		}
+		elsif($line=~/^(\d+)\s+(\d+)\s+(\S+)\s+ubox$/)
+		{
+			my $i = $1 - 1;
+			my $j = $2 - 1;
+			my $p = $3 * $3;
+
+			$ret[$i] += $p;
+			$ret[$j] += $p;
+		}
+	}
+	close ($fin);
+	return \@ret;
+}
 
 
 

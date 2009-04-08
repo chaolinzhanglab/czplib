@@ -5,9 +5,11 @@
 
 package MyConfig;
 use strict;
+use Carp;
 
 
-my $projHome = "/home5/zhang1/zhangc/proj";
+my $projHome = "/home/zhang/zhangc/proj";
+$projHome = $ENV {"PROJDIR"} if exists $ENV{"PROJDIR"};
 
 sub getDefaultCache
 {
@@ -20,6 +22,11 @@ sub getDefaultCache
 	return $cache;
 }
 
+sub getDefaultTmpDir
+{
+	return getDefaultCache (@_);
+}
+
 sub getGenomeDir
 {
 	my $species =$_[0];
@@ -27,6 +34,7 @@ sub getGenomeDir
 	return "$genomeDir/mm5"	if ($species eq 'mm5');
 	return "$genomeDir/mm6" if ($species eq 'mm6');
 	return "$genomeDir/mm8" if ($species eq 'mm8');
+	return "$genomeDir/mm9" if ($species eq 'mm9');
 	return "$genomeDir/hg17" if ($species eq 'hg17');
 	return "$genomeDir/hg18" if ($species eq 'hg18');
 	return "$genomeDir/rn4" if ($species eq 'rn4');

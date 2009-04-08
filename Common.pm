@@ -8,6 +8,11 @@ package Common;
 use strict;
 use Carp;
 use AnnotationIO;
+use Data::Dumper;
+use Bio::SeqIO;
+use File::Temp qw(:mktemp);
+no warnings 'recursion';
+
 
 =head1 NAME
 
@@ -22,6 +27,36 @@ Aug, 2005
 =cut
 
 my $debug = 0;
+
+
+
+sub chop_carriage
+{
+	my $str = $_[0];
+	$str =~ /^(.*?)\s*?$/;
+	$str = $1; 
+	return $str;
+}
+sub clean_rep
+{
+	my $str = $_[0];
+	#$str =~ s/\./\\\./g;
+	return quotemeta($str);
+}	
+
+sub list_to_rep
+{
+	my $symbols = $_[0];
+	my @tmp_list;
+	foreach my $s (@$symbols)
+	{
+		push @tmp_list, clean_rep ($s);
+	}
+	my $rep= join ("\\b|\\b", @tmp_list);
+	$rep = "\\b". $rep. "\\b";
+	return $rep;
+}	
+
 
 #get full path from relative path
 use Cwd;
@@ -95,6 +130,30 @@ sub segmentStr
 	my $colNum = 60;
 	$colNum = $_[1] if @_ > 1;
 	
+
+	#my ($str, $colNum) = @_;
+	my $strNew = "";
+	my $start = 0;
+
+	while ($start < length ($str))
+	{
+		my $length = min ($colNum, length($str) - $start);
+		$strNew .= substr ($str, $start, $length) . "\n";
+		#$str = substr ($str, $colNum);
+		$start += $colNum;
+	}
+	chomp $strNew; #remove the last "\n"
+	#$strNew .= $str;
+	return $strNew;
+}
+
+#inefficient, should not be used
+sub segmentStr2
+{
+	my $str = $_[0];
+	my $colNum = 60;
+	$colNum = $_[1] if @_ > 1;
+	
 	#my ($str, $colNum) = @_;
 	my $strNew = "";
 	while (length ($str) > $colNum)
@@ -105,6 +164,8 @@ sub segmentStr
 	$strNew .= $str;
 	return $strNew;
 }
+
+
 
 #//////////////////////////Array Manipulation/////////////////////////
 sub bootstrapArray
@@ -194,7 +255,9 @@ sub shuffleArray
 	die "shuffleArray: incorrect number of paramters.\n" if @_!= 1;
 	my $array = $_[0];
 	my $len = @$array;
-	
+	my $ret = [];
+	return $ret if $len <= 0;
+
 	my $randIdx = randSeq (0, $len);
 	my @randIdx = @$randIdx;
 	my @arrayNew = @$array;
@@ -207,6 +270,8 @@ sub randSeq
 {
 	die "randSeq: incorrect number of paramters.\n" if @_!= 2;
 	my ($start, $len) = @_;
+	my $ret = [];
+	return $ret if $len <= 0;
 	my %randHash;
 	my $i;
 	for ($i = $start; $i < $len + $start; $i++)
@@ -222,6 +287,9 @@ sub sampleSeq
 {
 	die "sampleSeq: incorrect number of parameters\n" if @_!= 3;
 	my ($start, $lenTotal, $lenSample) = @_;
+	my $ret = [];
+	return $ret if $lenSample <= 0;
+
 	my $end = $start + $lenTotal - 1;
 	my @seq = ($start..$end);
 	my $seqRand = randSeq ($start, $lenTotal);
@@ -260,6 +328,9 @@ sub norm
 sub max
 {
 	my @array = @_;
+
+	@array = @{$array[0]} if ref ($array[0]);
+
 	my $m = $array[0];
 	foreach my $elem (@array)
 	{
@@ -271,6 +342,9 @@ sub max
 sub min
 {
 	my @array = @_;
+
+	@array = @{$array[0]} if ref ($array[0]);
+
 	my $m = $array[0];
 	foreach my $elem (@array)
 	{
@@ -427,6 +501,28 @@ sub revcom
 	return CORE::reverse ($str);
 }
 
+
+
+sub nibFrag
+{
+	my ($nibFrag, $chromNib, $chromStart, $chromEnd, $strand, $name, $cacheDir) = @_;
+
+	Carp::croak "$cacheDir does not exists\n" unless -d $cacheDir;
+
+	$strand = 'm' if $strand eq '-';
+
+	my $tmpFile = mktemp ("XXXXXX");
+
+	my $nibFragTmp = "$cacheDir/$tmpFile.fa";
+	my $cmd = "$nibFrag -masked -name=\"$name\" $chromNib $chromStart $chromEnd $strand $nibFragTmp";
+	system ($cmd);
+	my $seqIO = Bio::SeqIO->new (-file=>$nibFragTmp, format=>'fasta');
+	my $seq=$seqIO->next_seq();
+	unlink $nibFragTmp;
+	
+	return $seq;
+}
+
 #contig coordinates to genome coordinates
 #$contig->{chrom=>chr1, chromStart=>2, chromEnd=>3, strand=>4}
 #$zero based coordinates
@@ -486,6 +582,151 @@ sub genome2contig
 }
 
 
+#cluster regions on the same chromosome
+#arg:
+#regionsOnChrom: regions on a chrom, bed format
+#strand filter : consider only tags on the give strand, could be +, - b (both)
+#maxGap        : max gap allowed to consider an overlap
+#overlapFraction: minimum fraction of overlap to consider a match
+#collapse      : 0 (no collapse), 1 (exact match), 2 (if one read are contained by other)
+#
+#return        : indices in the same clusters are put in an array
+
+
+sub clusterRegions
+{
+	my ($regionsOnChrom, $strand, $maxGap, $overlapFraction, $collapse) = @_;
+	
+
+	my @regionsOnChrom = @$regionsOnChrom; #make a copy
+
+	#my $chrom = $regionsOnChrom[0]->{"chrom"};
+	for (my $i = 0; $i < @regionsOnChrom; $i++)
+	{
+		my $r = $regionsOnChrom[$i];
+		#Carp::croak "regions are on different chromosomes\n" unless $chrom eq $r->{"chrom"};
+		$r->{"idx"} = $i; #add indices in the copy, not the original
+	}
+
+	#sort ascendingly according to the start point
+	#perl used a stable sort, so we want if the start point the same, the data is sorted according to chromEnd
+	#this is important for the collpase mode
+	
+	my @regionsOnChromSorted = sort {$a->{"chromEnd"} <=> $b->{"chromEnd"}} @regionsOnChrom;
+	@regionsOnChromSorted = sort {$a->{"chromStart"} <=> $b->{"chromStart"}} @regionsOnChromSorted;
+
+	my $n = @regionsOnChromSorted;
+
+	print "\n\nclustering begins with $n regions...\n" if $debug;
+	
+	my @clusters;
+	
+	my @currCluster;
+	my $currClusterEnd = -$maxGap - 1;
+	my $currClusterStart = -1;
+	
+	my $i = 0;
+	foreach my $r (@regionsOnChromSorted)
+	{
+		#next if ($strand ne 'b' && $strand ne $r->{"strand"});
+		$i++;
+
+		next if $strand ne 'b' && $strand ne $r->{"strand"};
+
+		my $chromStart = $r->{"chromStart"} - $maxGap / 2;
+		my $chromEnd = $r->{"chromEnd"} + $maxGap / 2;
+		my $idx = $r->{"idx"};
+		
+		print "$i: Previous clusterEnd = $currClusterEnd, curr read chromStart = $chromStart, chromEnd = $chromEnd, idx=$idx\n" if $debug;
+		
+		my $openNewCluster = 0;
+		
+		if ($collapse == 0)
+		{
+			my $overlapLen = Common::min ($currClusterEnd, $chromEnd) - Common::max($currClusterStart, $chromStart) + 1;
+			$openNewCluster = ($chromStart > $currClusterEnd) || ($overlapLen / ($chromEnd - $chromStart + 1) < $overlapFraction);
+		}
+		elsif ($collapse == 1)
+		{
+			$openNewCluster = ($chromStart > $currClusterStart || $chromEnd > $currClusterEnd);
+		}
+		elsif ($collapse == 2)
+		{
+			$openNewCluster = ($chromStart > $currClusterStart && $chromEnd > $currClusterEnd);
+		}
+		else
+		{
+			Carp::croak "invalid value of collapse mode\n";
+		}
+		
+		#begin a new cluster
+		if ($openNewCluster)
+		{
+			my $n = @currCluster;
+			print "close the old cluster with $n regions ...\n" if $debug;
+			print join ("\t", @currCluster), "\n" if $debug;
+
+			if (@currCluster > 0)
+			{
+				my @currClusterCpy = @currCluster;
+				push @clusters, \@currClusterCpy;
+			}
+			print "begin a new cluster...\n" if $debug;
+			@currCluster = ();
+			push @currCluster, $r->{"idx"};
+			$currClusterStart = $chromStart;
+			$currClusterEnd = $chromEnd;
+		}
+		else
+		{
+			my $n = @currCluster;
+			print "expand the current cluster with $n regions ...\n" if $debug;
+			#expand the old cluster
+			#
+			push @currCluster, $r->{"idx"};
+			#$currClusterStart = $chromStart if $currClusterStart > $chromStart;
+			$currClusterEnd = $chromEnd if $currClusterEnd < $chromEnd;
+		}
+	}
+	
+	if (@currCluster >0)
+	{
+		my @currClusterCpy = @currCluster;
+		push @clusters, \@currClusterCpy;
+	}
+	
+	$n = @clusters;
+	print "\n\n $n clusters found\n\n" if $debug;
+	return \@clusters;
+
+}
+
+sub collapseReads
+{
+	my ($readsOnChrom, $strand) = @_;
+	
+	my $key = "chromStart";
+	$key = "chromEnd" if $strand eq '-';
+
+	my %readsHash;
+
+   	foreach my $r (@$readsOnChrom)
+	{
+		next unless $r->{"strand"} eq $strand;
+		push @{$readsHash{$r->{$key}}}, $r;
+	}
+
+	my @clusters;
+	foreach my $pos (sort {$a <=> $b} keys %readsHash)
+	{
+		my $readsInCluster = $readsHash{$pos};
+		my @readsInClusterSorted = sort { $a->{"score"} <=> $b->{"score"} } @$readsInCluster; #sort according the number of mismatches
+		#sort according to length
+		@readsInClusterSorted = sort { $b->{"chromEnd"} - $b->{"chromStart"} <=> $a->{"chromEnd"} - $a->{"chromStart"} } @readsInClusterSorted;
+		push @clusters, \@readsInClusterSorted;
+	}
+	return \@clusters;
+}
 
 #base composition
 sub baseComp
@@ -638,7 +879,7 @@ sub blat
 	return $result;
 }
 
-
+#need to add code to handle alignment text
 sub checkSim4AlignQuality
 {
 	my ($aligns, $gene, $coverage, $identity, $verbose) = @_;
@@ -757,6 +998,69 @@ sub checkSim4AlignQuality
 	print "$n of $ntotal aligned transcripts passed quality control\n" if $verbose;
 	
 	return \@goodAligns;
+}
+
+
+
+#search a nucleotide word in a sequence
+#return the start position of each hit
+#
+#support IUB code
+
+
+sub allowIUB
+{
+	my $word = $_[0];
+	$word=~s/R/[A|G]/ig;
+	$word=~s/Y/[C|T]/ig;
+	$word=~s/M/[A|C]/ig;
+	$word=~s/K/[G|T]/ig;
+	$word=~s/S/[C|G]/ig;
+	$word=~s/W/[A|T]/ig;
+	$word=~s/H/[A|C|T]/ig;
+	$word=~s/B/[C|G|T]/ig;
+	$word=~s/V/[A|C|G]/ig;
+	$word=~s/D/[A|G|T]/ig;
+	$word=~s/N/[A|C|G|T]/ig;
+	return $word;
+}
+
+sub searchWord
+{
+	my ($str, $word) = @_;
+	my @hits;
+
+	$word=allowIUB ($word);
+	
+	while ($str =~/($word)/ig)
+	{
+		my $start = pos ($str) - length ($1);
+		my $end = $start + length ($1) - 1;
+		push @hits, [$start, $end];
+		pos ($str) = $start + 1;
+	}
+	return \@hits;	
+}
+
+
+sub countMismatch
+{
+	my ($w1, $w2, $ignoreCase) = @_;
+
+	$w1 =~tr/a-z/A-Z/ if $ignoreCase;
+	$w2 =~tr/a-z/A-Z/ if $ignoreCase;
+
+	Carp::croak "unequal length of $w1 and $w2\n" unless length ($w1) == length ($w2);
+
+	my @w1 = split (//, $w1);
+	my @w2 = split (//, $w2);
+
+	my $n = 0;
+	for(my $i = 0; $i < @w1; $i++)
+	{
+		$n++ if $w1[$i] ne $w2[$i];
+	}
+	return $n;
 }
 
 #Convert count matrix to stormo matrix
@@ -908,9 +1212,11 @@ sub waitUntilQsubDone
 		{
 			chomp $line;
 			my @cols = split (/\s+/, $line);
+			shift @cols if $cols[0] eq '';
 			my $jname = $cols[2];
+			#print $jname, "\n";
 
-			$jobNotFinished++ if ($jname eq $jobName);
+			$jobNotFinished++ if ($jname=~/^$jobName/);
 		}
 
 		if ($jobNotFinished > 0)
@@ -931,6 +1237,9 @@ sub waitUntilQsubDone
 		}
 	}
 }
+
+
+
 
 #phylogenetic tree manipulation
 #

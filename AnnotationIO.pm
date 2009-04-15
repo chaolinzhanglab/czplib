@@ -308,9 +308,16 @@ sub writePslFile
 sub writeBedFile
 {
 	
-	my ($regions, $header, $out) = @_;
+	my ($regions, $header, $out, $append) = @_;
 	my $fout = new FileHandle;
-	open ($fout, ">$out") || Carp::croak "can not open file $out to write\n";
+	if ($append && $append eq 'a')
+	{
+		open ($fout, ">>$out") || Carp::croak "can not open file $out to append\n";
+	}
+	else
+	{
+		open ($fout, ">$out") || Carp::croak "can not open file $out to write\n";
+	}
 	my $stdout = select ($fout);
 	my @colNames = qw (chrom chromStart chromEnd name score strand thickStart thickEnd itemRgb blockCount blockSizes blockStarts);
 	

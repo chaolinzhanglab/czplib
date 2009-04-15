@@ -46,14 +46,23 @@ sub clean_rep
 
 sub list_to_rep
 {
-	my $symbols = $_[0];
+	my ($symbols, $boundary) = @_;
 	my @tmp_list;
 	foreach my $s (@$symbols)
 	{
 		push @tmp_list, clean_rep ($s);
 	}
-	my $rep= join ("\\b|\\b", @tmp_list);
-	$rep = "\\b". $rep. "\\b";
+
+	my $rep= "";
+	if ($boundary)
+	{
+		$rep = join ("\\b|\\b", @tmp_list);
+		$rep = "\\b". $rep. "\\b";
+	}
+	else
+	{
+		$rep = join ("|", @tmp_list);
+	}
 	return $rep;
 }	
 
@@ -580,6 +589,136 @@ sub genome2contig
 			chromStart=>$tsOnContigStart, 
 			chromEnd=>$tsOnContigEnd};
 }
+
+
+#get unique paths(transcripts segments) between two coordinates from a set of paths(transcripts)
+#$paths: a refeence to an array, each element is a bed row
+#$chromStart and $chromEnd: zero-based coordinates of the query interval 
+#return an array ref. to the unique paths (transcript segments)
+
+sub getUniqPaths
+{
+	my ($paths, $chromStart, $chromEnd) = @_;
+	
+	my %uniqPaths;
+	foreach my $p (@$paths)
+	{
+		my $segment = segmentRegion ($p, $chromStart, $chromEnd);
+		next unless ref($segment) && $segment->{"chromStart"} == $chromStart && $segment->{"chromEnd"} == $chromEnd;
+
+		if (not exists ($segment->{"blockCount"}))
+		{
+			$segment = bed2Full($segment);
+		}
+
+		#with the same chromStart and end, block sizes and starts are sufficient to distinguish diffrerent clusters
+
+		my $key = join ("-", @{$segment->{"blockSizes"}},"//", @{$segment->{"blockStarts"}});
+		$uniqPaths{$key} = $segment;
+	}
+	my @uniqPaths = values %uniqPaths;
+	return \@uniqPaths;	
+}
+
+
+
+#get exon/intron structure between two coordinates specifying an interval of interest
+
+sub segmentRegion
+{ 
+	my ($ts, $chromStart, $chromEnd) = @_;
+
+	Carp::croak "region beyound the start and end of transcript:", Dumper ($ts), "\n" 
+	unless $ts->{"chromStart"} <= $chromStart && $ts->{"chromEnd"} >= $chromEnd;
+
+	if (not exists $ts->{"blockCount"} || $ts->{"blockCount"} == 1)
+	{
+		my %tsNew = %$ts;
+
+		$tsNew{"chromStart"} = $chromStart;
+		$tsNew{"chromEnd"} = $chromEnd;
+		$tsNew{"thickStart"} = $chromStart if exists $ts->{"thickStart"};
+		$tsNew{"thickEnd"} = $chromEnd if exists $ts->{"thickEnd"};
+		$tsNew{"blockSizes"} = [$chromEnd - $chromStart + 1] if exists $ts->{"blockSizes"};
+		return \%tsNew;
+	}
+
+	#there are multiple blocks
+	
+	my $firstBlockIdx = -1;
+	my $lastBlockIdx = -1;
+	for (my $i = 0; $i < $ts->{"blockCount"}; $i++)
+	{
+		my $exonStart = $ts->{"chromStart"} + $ts->{"blockStarts"}->[$i];
+		my $exonEnd = $ts->{"chromStart"} + $ts->{"blockStarts"}->[$i] + $ts->{"blockSizes"}->[$i] - 1;
+		
+		if ($exonEnd >= $chromStart)
+		{
+			$firstBlockIdx = $i;
+			last;
+		}
+	}
+
+	for (my $i = $ts->{"blockCount"} - 1; $i >= 0; $i--)
+	{
+		my $exonStart = $ts->{"chromStart"} + $ts->{"blockStarts"}->[$i];
+		my $exonEnd = $ts->{"chromStart"} + $ts->{"blockStarts"}->[$i] + $ts->{"blockSizes"}->[$i] - 1;
+		if ($exonStart <= $chromEnd)
+		{
+			$lastBlockIdx = $i;
+			last;
+		}
+	}
+	
+	return 0 unless $lastBlockIdx >= $firstBlockIdx;
+	
+	my %tsNew = (chrom=>$ts->{"chrom"},
+				chromStart=>$chromStart,
+				chromEnd=>$chromEnd,
+				name=>$ts->{"name"},
+				score=>$ts->{"score"},
+				strand=>$ts->{"strand"});
+	
+	my $blockCount = $lastBlockIdx - $firstBlockIdx + 1;
+
+	#get absolute start
+	my @blockStartsNew = map {$_ + $ts->{"chromStart"}} @{$ts->{"blockStarts"}}[$firstBlockIdx .. $lastBlockIdx];
+	my @blockSizesNew = @{$ts->{"blockSizes"}}[$firstBlockIdx .. $lastBlockIdx];
+
+	if ($chromStart < $blockStartsNew[0]) 
+	{
+		#start is in intronic region
+		$tsNew{'chromStart'} = $blockStartsNew[0];
+	}
+	else
+	{
+		#start is in exonic region
+		$blockSizesNew[0] = $blockStartsNew[0] + $blockSizesNew[0] - $chromStart;
+		$blockStartsNew[0] = $chromStart;
+	}
+
+	if ($chromEnd > $blockStartsNew[$blockCount - 1] + $blockSizesNew[$blockCount - 1] - 1)
+	{
+		#end is in intronic region
+		$tsNew{'chromEnd'} = $blockStartsNew[$blockCount - 1] + $blockSizesNew[$blockCount - 1] - 1;
+	}
+	else
+	{
+		$blockSizesNew[$blockCount - 1] = $chromEnd - $blockStartsNew[$blockCount -1] + 1;
+	}
+	@blockStartsNew = map {$_ - $tsNew{'chromStart'}} @blockStartsNew;
+	
+	$tsNew{'itemRgb'} = $ts->{'itemRgb'};
+	$tsNew{'thickStart'} = $tsNew{'chromStart'};
+	$tsNew{'thickEnd'} = $tsNew{'chromEnd'};
+	$tsNew{'blockCount'} = $lastBlockIdx - $firstBlockIdx + 1;
+	$tsNew{'blockStarts'} = \@blockStartsNew;
+	$tsNew{'blockSizes'} = \@blockSizesNew;
+
+	return \%tsNew;
+}
+
+
 
 
 #cluster regions on the same chromosome

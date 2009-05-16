@@ -101,6 +101,208 @@ sub line2bed
 }
 
 
+sub readVulgarFile
+{
+	my ($inVulgarFile, $verbose) = @_;
+
+	my @regions;
+	my $fin;
+	open ($fin, "<$inVulgarFile") || Carp::croak "cannot open file $inVulgarFile to read\n";
+	my $i = 0;
+	while (my $line = <$fin>)
+	{
+		chomp $line;
+		next unless $line=~/^vulgar:/;
+
+		print "$i ...\n" if $verbose && $i % 5000 == 0;
+		$i++;
+
+		my $ret = line2vulgar ($line);
+		push @regions, $ret;
+	}
+	close ($fin);
+	return \@regions;
+
+}
+
+
+sub line2vulgar
+{
+	my $line = $_[0];
+	my ($vulgar, $queryName, $queryStart, $queryEnd, $queryStrand, 
+			$targetName, $targetStart, $targetEnd, $targetStrand, $score, @cols) = split (/\s+/, $line);
+	my $ncol = @cols;
+
+	Carp::croak "match columns must be multiples of three: $line\n" unless $ncol % 3 == 0;
+	
+	my @blocks;
+	while (@cols)
+	{
+		my $type = shift @cols;
+		my $querySize = shift @cols;
+		my $targetSize = shift @cols;
+
+		push @blocks, {type=> $type, q=>$querySize, t=>$targetSize};
+	}
+	#print Dumper (\@blocks), "\n";
+
+	return {queryName=>$queryName, 
+			queryStart=>$queryStart, 
+			queryEnd=>$queryEnd, 
+			queryStrand=>$queryStrand, 
+			targetName=>$targetName, 
+			targetStart=>$targetStart, 
+			targetEnd=>$targetEnd, 
+			targetStrand=>$targetStrand, 
+			score=>$score, 
+			blocks=>\@blocks};
+}
+
+sub writeVulgarFile
+{
+	my ($regions, $outFile, $verbose) = @_;
+
+	my $fout;
+
+	open ($fout, ">$outFile") || Carp::croak "can not  open file $outFile to write\n";
+	
+	my $i = 0;
+	foreach my $r (@$regions)
+	{
+		print "$i...\n" if $verbose && $i % 5000 == 0;
+		print $fout vulgar2line ($r), "\n";
+	}
+	close ($fout);
+}
+
+
+sub vulgar2line
+{
+	my $vulgar = $_[0];
+
+	my @cols = qw(queryName queryStart queryEnd queryStrand targetName targetStart targetEnd targetStrand score blocks);
+	my @values = map {$vulgar->{$_}} @cols;
+
+	my $blocks = pop @values;
+
+	my $line = join (" ", "vulgar:", @values);
+
+	foreach my $b (@$blocks)
+	{
+		$line .= " " . join (" ", $b->{'type'}, $b->{'q'}, $b->{'t'});
+	}
+	return $line;
+}
+
+sub vulgarToBed
+{
+	my $vulgar = $_[0];
+
+	my $queryName = $vulgar->{'queryName'};
+	my $queryStart = $vulgar->{'queryStart'};
+	my $queryEnd = $vulgar->{'queryEnd'};
+	my $queryStrand = $vulgar->{'queryStrand'};
+	my $targetName = $vulgar->{'targetName'};
+	my $targetStart = $vulgar->{'targetStart'};
+	my $targetEnd = $vulgar->{'targetEnd'};
+	my $targetStrand = $vulgar->{'targetStrand'};
+	my $score = $vulgar->{'score'};
+	my @blocks = @{$vulgar->{'blocks'}};
+
+	my $ncol = ($#blocks+1)*3;
+
+	my @blockStarts;
+	my @blockEnds;
+
+	my $lastBlock = $blocks[$#blocks];
+
+	if ($lastBlock->{'t'} != $lastBlock->{'q'})
+	{
+		#protein
+		#$lastBlock->{'t'} += 3;
+		#$lastBlock->{'q'} += 1;
+	}
+
+	my $chrom = $targetName;
+	my $chromStart = $targetStart;
+	my $chromEnd = $targetEnd;
+
+	my $strand = $targetStrand;
+
+	if ($strand eq '+')
+	{
+		$chromEnd -= 1;
+	}
+	else
+	{
+		$chromStart = $targetEnd;
+		$chromEnd = $targetStart - 1;
+		@blocks = reverse @blocks;
+	}
+	
+	#my $blockIter = 0;
+	my $blockStart = $chromStart;
+	my $blockEnd = $chromStart - 1;
+
+	for (my $i = 0; $i < @blocks; $i++)
+	{
+		my $b = $blocks[$i];
+
+		if ($b->{"type"} eq 'M')
+		{
+			$blockEnd = $blockStart + $b->{"t"} - 1;
+
+			my $blockStartPolish = $blockStart;
+			my $blockEndPolish = $blockEnd;
+			
+			#consider split codon
+			if ($i > 0 && $blocks[$i-1]->{'type'} eq 'S')
+			{
+				$blockStartPolish -= $blocks[$i-1]->{'t'};
+			}
+
+			if ($i < @blocks - 1 && $blocks[$i+1]->{'type'} eq 'S')
+			{
+				$blockEndPolish += $blocks[$i+1]->{'t'};
+			}
+			push @blockStarts, $blockStartPolish;
+			push @blockEnds, $blockEndPolish;
+		}
+		$blockStart += $b->{"t"};
+	}
+
+
+	#add the last block
+	#push @blockStarts, $blockStart;
+	#push @blockEnds, $blockEnd;
+
+	my @blockSizes;
+
+	my $n = @blockStarts;
+	for (my $i = 0; $i < @blockStarts; $i++)
+	{
+		$blockSizes[$i] = $blockEnds[$i] - $blockStarts[$i] + 1;
+		$blockStarts[$i] -= $chromStart;
+	}
+
+	#$score /= (5 * ($queryEnd - $queryStart));
+
+	return {chrom=>$chrom, 
+			chromStart=>$chromStart, 
+			chromEnd=>$chromEnd, 
+			name=>$queryName, 
+			score=>$score, 
+			strand=>$strand,
+			thickStart=>$chromStart,
+			thickEnd=>$chromEnd,
+			itemRgb=>"0,0,0",
+			blockCount=>$n,
+			blockSizes=>\@blockSizes,
+			blockStarts=>\@blockStarts
+	};
+}
+
+
 sub gene2exon
 {
     my $g = $_[0];
@@ -478,6 +680,11 @@ sub printBedRegion
 	print $str, "\n";
 }
 
+sub bed2line
+{
+	my $region = $_[0];
+	return printBedRegionToString ($region);
+}
 
 #generate bed format into string
 sub printBedRegionToString

@@ -510,6 +510,42 @@ sub revcom
 	return CORE::reverse ($str);
 }
 
+my %mutationOffsetTable = (
+		'A'=>['C', 'G', 'T'],
+		'C'=>['G', 'T', 'A'],
+		'G'=>['T', 'A', 'C'],
+		'T'=>['A', 'C', 'G'],
+		'N'=>['N', 'N', 'N'],
+		'a'=>['c', 'g', 't'],
+		'c'=>['g', 't', 'a'],
+		'g'=>['t', 'a', 'c'],
+		't'=>['a', 'c', 'g'],
+		'n'=>['n', 'n', 'n'],);
+
+#
+
+sub mutateSeq
+{
+	my ($seqStr, $numMutation) = @_;
+	
+	$numMutation = max (0, $numMutation); #can not be negative
+	$numMutation = min (length($seqStr), $numMutation); #can not be more than the length of the sequence
+
+	if ($numMutation > 0)
+	{
+		my $mutPositions = sampleSeq (0, length($seqStr), $numMutation);
+		foreach my $pos (@$mutPositions)
+		{
+			my $offset = int (rand(3));
+			my $base = substr ($seqStr, $pos, 1);
+			my $mutant = exists $mutationOffsetTable{$base} ? $mutationOffsetTable {$base}->[$offset] : 'N';
+			
+				#print "seqStr=$seqStr, len=", $seq->length(), ", pos=$pos, base=$base, offset=$offset, mutant=$mutant\n";
+			substr($seqStr, $pos, 1) = $mutant;
+		}
+	}
+	return $seqStr;
+}
 
 
 sub nibFrag
@@ -718,6 +754,110 @@ sub segmentRegion
 	return \%tsNew;
 }
 
+
+#combine multiple regions (on the same strand) to get the union (in terms of exons)
+sub combineRegion
+{
+	my @regions = @_;
+
+	my @blocks;
+
+	my $region1 = $regions[0];
+
+	#my @regions = ($region1, $region2);
+
+	foreach my $region (@regions)
+	{
+		if (exists $region->{"blockStarts"})
+		{
+			for (my $i = 0; $i < @{$region->{"blockStarts"}}; $i++)
+			{
+				push @blocks, {start=>$region->{"chromStart"} + $region->{"blockStarts"}->[$i], 
+						end=> $region->{"chromStart"} + $region->{"blockStarts"}->[$i] + $region->{"blockSizes"}->[$i] - 1};
+			}
+		}
+		else
+		{
+			push @blocks, {start=>$region->{"chromStart"}, end=>$region->{"chromEnd"}};
+		}
+	}
+
+	@blocks = sort {$a->{"end"} <=> $b->{"end"}} @blocks;
+	@blocks = sort {$a->{"start"} <=> $b->{"start"}} @blocks;
+
+
+	my @clusters;
+	
+	my $currClusterStart = -1;
+	my $currClusterEnd = - 1;
+	
+	#my $n = @blocks;
+	my $i = 0;
+
+	foreach my $b (@blocks)
+	{
+		$i++;
+		my $chromStart = $b->{"start"};
+		my $chromEnd = $b->{"end"};
+
+		my $openNewCluster = 0;
+
+		$openNewCluster = $chromStart > $currClusterEnd;
+		if ($openNewCluster)
+		{
+			if ($currClusterEnd >= 0)
+			{
+				push @clusters, {start=>$currClusterStart, end=>$currClusterEnd};
+			}
+
+			$currClusterStart = $chromStart;
+			$currClusterEnd = $chromEnd;
+		}
+		else
+		{
+			$currClusterEnd = $chromEnd if $currClusterEnd < $chromEnd;
+		}
+
+	}
+	
+	if ($currClusterEnd >= 0)
+	{
+		push @clusters, {start=>$currClusterStart, end=>$currClusterEnd};
+	}
+
+	my $n = @clusters;
+
+	my $chromStart =  $clusters[0]->{"start"};
+	my $chromEnd = $clusters[$n-1]->{"end"};
+
+	my $blockCount = @clusters;
+
+	my @blockStarts;
+	my @blockSizes;
+	for (my $i = 0; $i < $n; $i++)
+	{
+		$blockStarts[$i] = $clusters[$i]->{"start"} - $chromStart;
+		$blockSizes[$i] = $clusters[$i]->{"end"} - $clusters[$i]->{"start"} + 1;
+	}
+
+
+	my $region = {
+		chrom => $region1->{"chrom"},
+		chromStart => $chromStart,
+		chromEnd => $chromEnd, 
+		name => $region1->{"name"},
+		score => 0, #$region1->{"score"} + $region2->{"score"},
+		strand=> $region1->{"strand"},
+		thickStart=> $chromStart,
+		thickEnd=> $chromEnd,
+		itemRgb=> "0,0,0",
+		blockCount=> $blockCount,
+		blockSizes=> \@blockSizes,
+		blockStarts=>\@blockStarts
+	};
+
+	return $region;
+}
 
 
 

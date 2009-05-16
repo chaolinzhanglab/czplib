@@ -8,7 +8,7 @@ use strict;
 use Carp;
 
 
-my $projHome = "/home/zhang/zhangc/proj";
+my $projHome = "/home2/zhang/zhangc/proj";
 $projHome = $ENV {"PROJDIR"} if exists $ENV{"PROJDIR"};
 
 sub getDefaultCache

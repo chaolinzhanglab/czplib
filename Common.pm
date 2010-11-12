@@ -175,6 +175,22 @@ sub segmentStr2
 }
 
 
+sub wordcount
+{
+	my ($seqStr, $wordSize) = @_;
+	my $seqLen = length ($seqStr);
+	$seqStr = uc ($seqStr);
+	my %wordHash;
+	for (my $i = 0; $i < length ($seqStr) - $wordSize + 1; $i++)
+	{
+		my $w = substr ($seqStr, $i, $wordSize);
+		next if $w=~/[^ACGT]/;
+		$wordHash{$w}++;
+	}
+	return \%wordHash;
+}
+
+
 
 #//////////////////////////Array Manipulation/////////////////////////
 sub bootstrapArray
@@ -324,11 +340,14 @@ sub norm
 	die "norm: incorrect number of parameters.\n" if @_ != 1;
 	my $array = $_[0];
 	my $sum = 0;
-	my $elem;
-	foreach $elem (@$array)
-	{
-		$sum += $elem * $elem;
-	}
+	
+	map {$sum+= $_ ^2} @$array;
+
+	#my $elem;
+	#foreach $elem (@$array)
+	#{
+	#	$sum += $elem * $elem;
+	#}
 	$sum = sqrt ($sum);
 	return $sum;
 }
@@ -341,10 +360,12 @@ sub max
 	@array = @{$array[0]} if ref ($array[0]);
 
 	my $m = $array[0];
-	foreach my $elem (@array)
-	{
-		$m = ($elem > $m)? $elem : $m;
-	}
+	map {$m = $_ if $m < $_} @array;
+
+	#foreach my $elem (@array)
+	#{
+	#	$m = ($elem > $m)? $elem : $m;
+	#}
 	return $m;
 }
 
@@ -355,10 +376,12 @@ sub min
 	@array = @{$array[0]} if ref ($array[0]);
 
 	my $m = $array[0];
-	foreach my $elem (@array)
-	{
-		$m = ($elem < $m)? $elem : $m;
-	}
+	map {$m = $_ if $m > $_} @array;
+
+	#foreach my $elem (@array)
+	#{
+	#	$m = ($elem < $m)? $elem : $m;
+	#}
 	return $m;
 }
 
@@ -386,20 +409,34 @@ sub sum
 {
 	my $array = $_[0];
 	my $sum = 0;
-	my $elem;
-	foreach $elem (@$array)
-	{
-		$sum += $elem;
-	}
+	map {$sum+= $_} @$array;
+
+	#my $elem;
+	#foreach $elem (@$array)
+	#{
+	#	$sum += $elem;
+	#}
 	return $sum;
 }
+
+sub sum2
+{
+	my $array = $_[0];
+	my $sum = 0;
+	map {$sum+=$_} @$array;
+	return $sum;
+}
+
+
+
+
 
 #
 sub mean
 {
 	my $array = $_[0];
 	my $len = @$array;
-	die "empty array\n" if $len == 0;
+	Carp::croak "empty array\n" if $len == 0;
 	return sum ($array) / $len;
 }
 
@@ -459,6 +496,19 @@ sub enumerateKofN
 		$array = \@arrayNew;
 	}
 	return $array;
+}
+
+
+sub entropy
+{
+	my $dist = $_[0];
+	my $entropy = 0;
+
+	foreach my $p (@$dist)
+	{
+		$entropy -= $p * log($p) / log(2);
+	}
+	return $entropy;
 }
 
 #/////////////////////////Clustering////////////////////////////////
@@ -865,8 +915,8 @@ sub combineRegion
 #arg:
 #regionsOnChrom: regions on a chrom, bed format
 #strand filter : consider only tags on the give strand, could be +, - b (both)
-#maxGap        : max gap allowed to consider an overlap
-#overlapFraction: minimum fraction of overlap to consider a match
+#maxGap        : max gap allowed for regions in a cluster (minimum overlap if maxGap < 0)
+#overlapFraction: if minGap < 0, minimum fraction of overlap to consider a match
 #collapse      : 0 (no collapse), 1 (exact match), 2 (if one read are contained by other)
 #
 #return        : indices in the same clusters are put in an array
@@ -876,6 +926,13 @@ sub clusterRegions
 {
 	my ($regionsOnChrom, $strand, $maxGap, $overlapFraction, $collapse) = @_;
 	
+	my $minOverlap = -1;#no requirement on overlap, when maxGap > 0
+
+	if ($maxGap < 0)
+	{
+		$minOverlap = -$maxGap; #with requirement on overlap
+		$maxGap = 0;
+	}
 
 	my @regionsOnChrom = @$regionsOnChrom; #make a copy
 
@@ -912,8 +969,18 @@ sub clusterRegions
 
 		next if $strand ne 'b' && $strand ne $r->{"strand"};
 
-		my $chromStart = $r->{"chromStart"} - $maxGap / 2;
-		my $chromEnd = $r->{"chromEnd"} + $maxGap / 2;
+		Carp::croak "negative coordinates\n", Dumper ($r), "\n" if $r->{'chromStart'} < 0 || $r->{'chromEnd'} < 0;
+		my $chromStart = $r->{"chromStart"};
+		my $chromEnd = $r->{"chromEnd"};
+
+		if ($maxGap > 0)
+		{
+			#we extend each region, so that an overlap in the extended region means a distance < maxgap in the original region
+			$chromStart = $r->{"chromStart"} - $maxGap / 2;
+			$chromEnd = $r->{"chromEnd"} + $maxGap / 2;
+			#extension will not affect the collapse mode
+		}
+
 		my $idx = $r->{"idx"};
 		
 		print "$i: Previous clusterEnd = $currClusterEnd, curr read chromStart = $chromStart, chromEnd = $chromEnd, idx=$idx\n" if $debug;
@@ -923,7 +990,18 @@ sub clusterRegions
 		if ($collapse == 0)
 		{
 			my $overlapLen = Common::min ($currClusterEnd, $chromEnd) - Common::max($currClusterStart, $chromStart) + 1;
-			$openNewCluster = ($chromStart > $currClusterEnd) || ($overlapLen / ($chromEnd - $chromStart + 1) < $overlapFraction);
+
+			if ($minOverlap < 0)
+			{
+				#does not require overlap, but a max gap
+				#print "chromStart = $chromStart, curr cluster end = $currClusterEnd\n";
+				$openNewCluster = ($chromStart - $currClusterEnd -1 > 0);
+			}
+			else
+			{
+				#requirement on overlap 
+				$openNewCluster = ($overlapLen < $minOverlap) || ($overlapLen / ($chromEnd - $chromStart + 1) < $overlapFraction);
+			}
 		}
 		elsif ($collapse == 1)
 		{
@@ -1372,6 +1450,23 @@ sub ToStormoMatrix
 	}
 	return $matrix;
 }
+
+sub RevComMatrix
+{
+	my $matrix = $_[0];
+	my $width = @$matrix;
+	
+	my @matrixRC;
+
+	for (my $i = 0; $i < $width; $i++)
+	{
+		$matrixRC[$i] = {A=>$matrix->[$i]->{'T'}, C=>  $matrix->[$i]->{'G'}, G=> $matrix->[$i]->{'C'},T=> $matrix->[$i]->{'A'}};
+	}
+	@matrixRC = reverse (@matrixRC);
+	return \@matrixRC;
+}
+
+
 
 #status: tested
 #Date: 09/29/2006

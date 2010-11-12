@@ -520,30 +520,32 @@ sub writeBedFile
 	{
 		open ($fout, ">$out") || Carp::croak "can not open file $out to write\n";
 	}
-	my $stdout = select ($fout);
-	my @colNames = qw (chrom chromStart chromEnd name score strand thickStart thickEnd itemRgb blockCount blockSizes blockStarts);
+	#my $stdout = select ($fout);
+	#my @colNames = qw (chrom chromStart chromEnd name score strand thickStart thickEnd itemRgb blockCount blockSizes blockStarts);
 	
 	if (@$regions <1)
 	{
-		select ($stdout);
+		#select ($stdout);
 		close ($fout);
 		return;
 	}
 
-	my $colId;
-	for ($colId = @colNames - 1; $colId > 0; $colId--)
-	{
-		last if (exists $regions->[0]->{$colNames[$colId]});
-	}
+	#my $colId;
+	#for ($colId = @colNames - 1; $colId > 0; $colId--)
+	#{
+	#	last if (exists $regions->[0]->{$colNames[$colId]});
+	#}
 	
-	my $colNum = $colId + 1;	#total column number
+	#my $colNum = $colId + 1;	#total column number
 	
-	print $header, "\n" if ($header =~/^track/);
+	print $fout $header, "\n" if ($header =~/^track/);
 	
 	foreach my $r (@$regions)
 	{
 		#this is not a real copy
-		
+	
+		print $fout printBedRegionToString ($r), "\n";
+=annt
 		my %rCopy = %$r;
 
 		$rCopy{"chromEnd"} += 1;
@@ -575,13 +577,15 @@ sub writeBedFile
 			}
 		}
 		print "\n";
+=cut
 	}
+
 	close ($fout);
-	select ($stdout);
+	#select ($stdout);
 }
 
 
-sub splitBedFilebyChrom
+sub splitBedFileByChrom
 {
 	my ($inBedFile, $outDir, $verbose) = @_;
 

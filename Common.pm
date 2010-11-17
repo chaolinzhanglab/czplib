@@ -709,12 +709,11 @@ sub getUniqPaths
 
 
 #get exon/intron structure between two coordinates specifying an interval of interest
-
 sub segmentRegion
 { 
 	my ($ts, $chromStart, $chromEnd) = @_;
 
-	Carp::croak "region beyound the start and end of transcript:", Dumper ($ts), "\n" 
+	Carp::croak "region beyond the start and end of transcript:", Dumper ($ts), "\n" 
 	unless $ts->{"chromStart"} <= $chromStart && $ts->{"chromEnd"} >= $chromEnd;
 
 	if (not exists $ts->{"blockCount"} || $ts->{"blockCount"} == 1)
@@ -1567,6 +1566,8 @@ sub ToBayesianMatrix
 	}
 }
 
+#this function is obsolete
+#
 sub waitUntilQsubDone
 {
 	my ($user, $jobName, $nSplit, $verbose) = @_;
@@ -1600,7 +1601,7 @@ sub waitUntilQsubDone
 			{
 				my $date = `date`;
 				chomp $date;
-				print "$date: $jobNotFinished of $nSplit jobs are still running...\n" if ($secondSlept - int($secondSlept / 60) * 60 == 0)
+				print "$date: $jobNotFinished of $nSplit jobs are still running...\n" if $verbose && $secondSlept % 60 == 0;
 			}
 			sleep (10);	#10 second
 		}
@@ -1612,7 +1613,78 @@ sub waitUntilQsubDone
 	}
 }
 
+#return the status of unfinished jobs among a specified list
 
+sub waitUntilSGEJobsDone
+{
+	my ($jobIds, $verbose, $user) = @_;
+	my $total = @$jobIds;
+	my $secondSlept = 0;
+	
+	while (1)
+	{
+		my $status = checkSGEJobStatus ($jobIds, $user);
+
+		return 1 unless keys %$status > 0;
+
+		my $summary = $status->{'summary'};
+
+		foreach my $stat (keys %$summary)
+		{
+			Carp::croak "detect failed jobs: ", Dumper ($status), "\n" unless $stat eq 'r' || $stat eq 't' || $stat eq 'qw';
+		}
+		my $n = keys %$status;
+		$n--;
+		my $date = `date`;
+		chomp $date;
+			
+		print "$n of $total jobs are not finished yet at $date ...\n" if $verbose && $secondSlept % 60 == 0;
+		sleep (10); #10 seconds
+		$secondSlept += 10;
+	}
+}
+
+sub checkSGEJobStatus
+{
+	my ($jobIds, $user) = @_;
+	Carp::croak "no job id specified in:", Dumper ($jobIds), "\n" unless @$jobIds > 0;
+	
+	my %jobStatus = map {$_=> 1} @$jobIds;
+
+	my $cmd = "qstat";
+	$cmd .= " -u $user" if $user;
+
+	my @qstat = `$cmd`;
+	return {} unless @qstat > 0;
+	
+	#remove title rows
+	shift @qstat; shift @qstat;
+	
+	my %summary;
+	
+	foreach my $line (@qstat)
+	{
+		chomp $line;
+
+		$line=~s/^\s*//;
+		my @cols = split (/\s+/, $line);
+		
+		my $id = $cols[0];
+		my $u = $cols[3];
+		my $status = $cols[4];
+		
+		if ($user)
+		{
+			next unless $u eq $user;
+		}
+		next unless exists $jobStatus {$id};
+		$summary{$status} += 1;
+		$jobStatus{$id} = $status;
+	}
+		
+	$jobStatus{'summary'} = \%summary;
+	return \%jobStatus;
+}
 
 
 #phylogenetic tree manipulation

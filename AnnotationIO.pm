@@ -23,6 +23,48 @@ BED file
 
 my $debug = 0;
 
+
+sub splitFileByRow
+{
+	my ($inFile, $outFileStem, $n, $verbose, $append) = @_;
+
+	my $fin;
+	my $fout;
+	open ($fin, "<$inFile") || Carp::croak "cannot open $inFile to read\n";
+	
+	my $i = 0;
+	my $iSplit = -1;
+	while (my $line = <$fin>)
+	{
+		chomp $line;
+		next if $line =~/^\s*$/;
+
+		if ($i % $n == 0)
+		{
+			if ($iSplit >=0)
+			{
+				close ($fout);
+			}
+
+			$iSplit++;
+
+			print "starting a new split $iSplit ...\n";
+
+			my $outFile = "$outFileStem.$iSplit";
+			print "outFile = $outFile\n" if $verbose;
+			
+			my $appendFlag = $append ? ">>" : ">";
+			open ($fout, $appendFlag . $outFile) || Carp::croak "cannot open $outFile to write\n";
+		}
+		$i++;
+		print $fout $line, "\n";
+	}
+
+	close ($fin);
+	close ($fout) if $iSplit > -1;
+}
+
+
 sub readBedFile
 {
 	my $in = $_[0];
@@ -46,7 +88,7 @@ sub readBedFile
 		next if $line =~/^\#/;
 		next if $line =~/^track name\=/;
 
-		print "$i ...\n" if $verbose && int ($i / 10000) * 10000 - $i == 0;
+		print "$i ...\n" if $verbose && $i % 100000 == 0;
 		$i++;
 
 		my $entry = line2bed ($line);

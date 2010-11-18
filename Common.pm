@@ -716,7 +716,8 @@ sub segmentRegion
 	Carp::croak "region beyond the start and end of transcript:", Dumper ($ts), "\n" 
 	unless $ts->{"chromStart"} <= $chromStart && $ts->{"chromEnd"} >= $chromEnd;
 
-	if (not exists $ts->{"blockCount"} || $ts->{"blockCount"} == 1)
+	my $blockCount = exists $ts->{'blockCount'} ? $ts->{'blockCount'} : 1;
+	if ($blockCount == 1)
 	{
 		my %tsNew = %$ts;
 
@@ -764,7 +765,7 @@ sub segmentRegion
 				score=>$ts->{"score"},
 				strand=>$ts->{"strand"});
 	
-	my $blockCount = $lastBlockIdx - $firstBlockIdx + 1;
+	$blockCount = $lastBlockIdx - $firstBlockIdx + 1;
 
 	#get absolute start
 	my @blockStartsNew = map {$_ + $ts->{"chromStart"}} @{$ts->{"blockStarts"}}[$firstBlockIdx .. $lastBlockIdx];

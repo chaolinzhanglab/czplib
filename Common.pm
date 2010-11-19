@@ -694,7 +694,7 @@ sub getUniqPaths
 
 		if (not exists ($segment->{"blockCount"}))
 		{
-			$segment = bed2Full($segment);
+			$segment = AnnotationIO::bed2Full($segment);
 		}
 
 		#with the same chromStart and end, block sizes and starts are sufficient to distinguish diffrerent clusters

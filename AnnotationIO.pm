@@ -48,7 +48,7 @@ sub splitFileByRow
 
 			$iSplit++;
 
-			print "starting a new split $iSplit ...\n";
+			print "starting a new split $iSplit ...\n" if $verbose;
 
 			my $outFile = "$outFileStem.$iSplit";
 			print "outFile = $outFile\n" if $verbose;

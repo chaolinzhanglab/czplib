@@ -116,6 +116,8 @@ sub saveHarmonicNumberTable
 	foreach my $s (sort {$a <=> $b} keys %$table)
 	{
 		my $s2 = encode ($s);
+
+		print "s=$s2\n" if $verbose;
 		foreach my $N (sort {$a <=> $b} keys %{$table->{$s2}})
 		{
 			print $fout join ("\t", $s2, $N, $table->{$s2}{$N}), "\n";
@@ -124,17 +126,22 @@ sub saveHarmonicNumberTable
 	close ($fout);
 }
 
+
 sub loadHarmonicNumberTable
 {
 	my ($inFile) = @_;
 
 	my %table;
 	my $fin;
+	my $i = 0;
 	open ($fin, "<$inFile") || Carp::croak "cannot open $inFile to read\n";
 	while (my $line = <$fin>)
 	{
 		chomp $line;
 		next if $line=~/^\s*$/;
+
+		print "$i ...\n" if $verbose && $i % 100000 == 0;
+		$i++;
 
 		my ($s, $N, $z) = split (/\t/, $line);
 		my $s2 = encode ($s);
@@ -148,10 +155,13 @@ sub getHarmonicNumber
 {
 	my ($table, $s, $N) = @_;
 	my $s2 = encode ($s);
-	return exists $table->{$s2}{$N} ? $table->{$s2}{$N} : -1;
+	return exists $table->{$s2} && exists $table->{$s2}{$N} ? $table->{$s2}{$N} : -1;
 }
 
+1;
 
+
+=end
 sub buildZetaTable
 {
 	my %zeta;

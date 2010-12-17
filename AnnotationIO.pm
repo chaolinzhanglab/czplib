@@ -82,11 +82,13 @@ sub readBedFile
 	open ($fd, "<$in")||Carp::croak "can not open file $in to read\n";
 	my $i = 0;
 	
+	#TO DO: replace the following lines with readNextBedLine
 	while (my $line = <$fd>)
 	{
+		chomp $line;
 		next if $line =~/^\s*$/;
 		next if $line =~/^\#/;
-		next if $line =~/^track name\=/;
+		next if $line =~/^track/;
 
 		print "$i ...\n" if $verbose && $i % 100000 == 0;
 		$i++;
@@ -98,6 +100,90 @@ sub readBedFile
 	close ($fd);
 	return $out;
 }
+
+
+#read "blocks" of regions
+#regions in each block are separated by no more than $maxGap
+#regions of different blocks are separated by more than $maxGap
+#if $minBlockSize is specified
+#neighboring blocks might be merged if the size is too small
+
+sub readNextBedBlock
+{
+		my ($fin, $maxGap, $separateStrand, %params) = @_;
+
+		my $currBlockEnd = -1;
+		my @bedBlock;
+
+		my $minBlockSize = exists $params{'minBlockSize'} ? $params{'minBlockSize'} : 0;
+
+
+		Carp::croak "gap cannot be negative\n" if $maxGap < 0;
+
+		my $currPointer = tell ($fin);
+
+		while (my $bedLine = readNextBedLine ($fin))
+		{
+			if ($separateStrand)
+			{
+				Carp::croak "no strand information in ", Dumper ($bedLine), "\n" unless exists $bedLine->{'strand'};
+			}
+			
+			Carp::croak "negative coordinates in ", Dumper ($bedLine), "\n" if $bedLine->{'chromEnd'} < 0;
+
+			my $expand = 0;
+
+			if ($currBlockEnd < 0 || @bedBlock < $minBlockSize) #this is the first line of the block
+			{
+				$expand = 1;
+			}
+			else
+			{
+				if ($separateStrand)
+				{
+					$expand = 1 if $bedBlock[$#bedBlock]->{'strand'} eq $bedLine->{'strand'} 
+						&& $bedBlock[$#bedBlock]->{'chrom'} eq $bedLine->{'chrom'} 
+						&& $bedLine->{'chromStart'} - $currBlockEnd  - 1 <= $maxGap;
+				}
+				else
+				{
+					$expand = 1 if $bedBlock[$#bedBlock]->{'chrom'} eq $bedLine->{'chrom'} 
+						&& $bedLine->{'chromStart'} - $currBlockEnd  - 1 <= $maxGap;
+				}
+			}
+
+			if ($expand)
+			{	#expand the block
+				push @bedBlock, $bedLine;
+				$currBlockEnd = $bedLine->{'chromEnd'} if $bedLine->{'chromEnd'} > $currBlockEnd;
+				$currPointer = tell ($fin);
+			}
+			else
+			{
+				#reached the end of the current block
+				seek ($fin, $currPointer, 0);
+				return \@bedBlock;
+			}
+		}
+		return @bedBlock > 0 ? \@bedBlock : 0;#the last block
+}
+
+
+sub readNextBedLine
+{
+		my $fin = $_[0];
+		while (my $line = <$fin>)
+		{
+				chomp $line;
+				next if $line =~/^\s*$/;
+				next if $line =~/^\#/;
+				next if $line =~/^track/;
+				
+				return line2bed ($line);
+		}
+		return "";
+}
+
 
 sub line2bed
 {
@@ -627,9 +713,49 @@ sub writeBedFile
 }
 
 
+sub sortBedFile
+{
+		my ($inFile, $outFile, $separateStrand) = @_;
+		my $ncols = `head -n 1 $inFile | awk '{print NF}'`; chomp $ncols;
+		Carp::croak "less than 6 columns\n" if $separateStrand && $ncols < 6;
+
+		my $cmd = "grep -v \"^track\"  $inFile | grep -v \"^#\" | sort";
+		$cmd .= " -k 6,6" if $separateStrand;
+		$cmd .= " -k 1,1 -k 2,2n -k 3,3n > $outFile";
+
+		#print $cmd, "\n" if $verbose;
+		my $ret = system ($cmd);
+		Carp::croak "CMD=$cmd failed:$?\n" if $ret != 0;
+}
+
+
+#the param sort:
+#sort == 0: no sort
+#sort == 1: sort, but with the two strands together
+#sort == 2: sort, with the two strands separate
+#
 sub splitBedFileByChrom
 {
-	my ($inBedFile, $outDir, $verbose) = @_;
+	#my ($inBedFile, $outDir, $verbose) = @_;
+
+	my $inBedFile = shift @_;
+	my $outDir = shift @_;
+
+	#optional parameters
+	my $verbose = 0; #verbose mode
+	my $sort = 0;	#sort by chrom, then by chromStart, and then by chromEnd, if sort ==2, sort by strand first
+	my %params;
+
+	if (@_ == 1)
+	{
+		$verbose = $_[0]; #this is for back compatibility
+	}
+	else
+	{
+		%params = @_;
+		$verbose = $params{'v'} if exists $params{'v'};
+		$sort = $params {'sort'} if exists $params {'sort'};
+	}
 
 	Carp::croak "$inBedFile does not exist\n" unless -f $inBedFile;
 	Carp::croak "$outDir does not exist\n" unless -d $outDir;
@@ -652,9 +778,9 @@ sub splitBedFileByChrom
 	
 		$i++;
 
-		print "$i ...\n" if $i - int ($i / 50000) * 50000 == 0 && $verbose;
+		print "$i ...\n" if $i % 100000 == 0 && $verbose;
 	
-		$line =~/(\S+)\t/;
+		$line =~/(\S+)\s/;
 
 		my $chrom = $1;
 		#print "chrom = $chrom\n";
@@ -687,8 +813,18 @@ sub splitBedFileByChrom
 	foreach my $chrom (keys %fhHash)
 	{
 		close ($fhHash{$chrom});
-	}
 
+		if ($sort)
+		{
+				print "sorting $chrom ...\n" if $verbose;
+				my $f = $tagCount{$chrom}->{'f'};
+				my $f2 = "$f.sort";
+
+				my $separateStrand = $sort > 1 ? 1 : 0;
+				sortBedFile ($f, $f2, $separateStrand);
+				system ("mv $f2 $f");
+		}
+	}
 	return \%tagCount;
 }
 
@@ -718,6 +854,22 @@ sub bed2Full
 
 	return $region;
 }
+
+sub copyBedRegion
+{
+	my $region = $_[0];
+	my %regionCopy = map {$_=>$region->{$_}} keys %$region;
+	if (exists $regionCopy{'blockStarts'})
+	{
+		my @blockStarts = %{$regionCopy{'blockStarts'}};
+		$regionCopy{'blockStarts'}= \@blockStarts;
+	
+		my @blockSizes = %{$regionCopy{'blockSizes'}};
+		$regionCopy{'blockSizes'} = \@blockSizes;
+	}
+	return \%regionCopy;
+}
+
 
 sub printBedRegion
 {

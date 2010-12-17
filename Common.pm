@@ -598,6 +598,21 @@ sub mutateSeq
 }
 
 
+sub generateRandomSeq
+{
+	my $seqLen = $_[0];
+	my @ret;
+	my @alphabet = qw(A C G T);
+
+	foreach my $i (0 .. ($seqLen -1))
+	{
+		my $idx = int (rand (4));
+		push @ret , $alphabet[$idx];
+	}
+	return join("", @ret);
+}
+
+
 sub nibFrag
 {
 	my ($nibFrag, $chromNib, $chromStart, $chromEnd, $strand, $name, $cacheDir) = @_;

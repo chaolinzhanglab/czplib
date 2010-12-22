@@ -1,24 +1,62 @@
-#!/usr/bin/perl -w
+#
+#===============================================================================
+#
+#         FILE:  ScanStatistics.pm
+#
+#  DESCRIPTION:  Package to calculate scan statistics
+#         BUGS:  ---
+#        NOTES:  
+#       AUTHOR:  Chaolin Zhang (cz), czhang@rockefeller.edu
+#      COMPANY:  Rockefeller University
+#      VERSION:  1.0
+#      CREATED:  10/21/2010
+#     REVISION:  ---
+#===============================================================================
+
 
 package ScanStatistics;
+
+require Exporter;
+
+@ISA = qw (Exporter);
+
+@EXPORT = qw (
+	calcScanStatistic
+);
+
+
+=head1 NAME
+
+ScaleFree - calculate scan statistics
+
+Reference
+
+J Glaz, J Naus, and S Wallenstein 2001 Scan Statistics, Springer, P.28
+
+usage:
+
+my $pvalue = calcScanStatistic ($k, $phi, $N);
+
+$k: observed peak height
+$phi: the expected peak height
+$N: number of nonoverlapping window
+
+=cut
+
+
 use strict;
+use warnings;
 
-#sub calcScanStatistic
-#
-#by Chaolin Zhang (czhang@rockefeller.edu)
-#implemented according to J Glaz, J Naus, and S Wallenstein 2001 Scan Statistics, Springer, P.28
 
-#k: observed peak height
-#phi: the expected peak height
-#N: number of nonoverlapping window
-#
+#dictionary stores some intermediate results to save time
+
+my %dictionary;
+
+
 #  lamda_g=a_g * T /sum(a_g * (L_g-w)) is the expected number of reads at a single position, a_g and L_g are the abundance of gene g, w is the read length
 #  phi_g = lamda_g * w
 #  N_g = L_g / w is the number of nonoverlapping window
 #
-
-my %dictionary;
-
 
 sub calcScanStatistic 
 {

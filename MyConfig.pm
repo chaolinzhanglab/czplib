@@ -1,14 +1,47 @@
-# create on Nov 22, 2004
-# by Chaolin Zhang
 #
-# Common subroutines
+#===============================================================================
+#
+#         FILE:  MyConfig.pm
+#
+#  DESCRIPTION:  Package to work space configuration
+#         BUGS:  ---
+#        NOTES:  ---
+#       AUTHOR:  Chaolin Zhang (cz), czhang@rockefeller.edu
+#      COMPANY:  Rockefeller University
+#      VERSION:  1.0
+#      CREATED:  11/22/2004
+#     REVISION:  ---
+#===============================================================================
+
 
 package MyConfig;
+
+require Exporter;
+
+@ISA = qw (Exporter);
+
+@EXPORT = qw (
+	getDefaultCache
+	getGenomeDir
+);
+
+
 use strict;
+use warnings;
+
+
+
+
+=head1 Bed
+
+Subroutines to handle workspace 
+
+=cut
+
 use Carp;
 
 
-my $projHome = "/home2/zhang/zhangc/proj";
+my $projHome = "/home2/zhangc/proj";
 $projHome = $ENV {"PROJDIR"} if exists $ENV{"PROJDIR"};
 
 sub getDefaultCache
@@ -22,10 +55,12 @@ sub getDefaultCache
 	return $cache;
 }
 
+
 sub getDefaultTmpDir
 {
 	return getDefaultCache (@_);
 }
+
 
 sub getGenomeDir
 {

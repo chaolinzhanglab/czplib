@@ -1,7 +1,48 @@
+#
+#===============================================================================
+#
+#         FILE:  ScaleFree.pm
+#
+#  DESCRIPTION:  Package to handle scale free distribution
+#         BUGS:  ---
+#        NOTES:  
+#       AUTHOR:  Chaolin Zhang (cz), czhang@rockefeller.edu
+#      COMPANY:  Rockefeller University
+#      VERSION:  1.0
+#      CREATED:  11/20/2010
+#     REVISION:  ---
+#===============================================================================
+
 
 package ScaleFree;
 
+require Exporter;
+
+@ISA = qw (Exporter);
+
+@EXPORT = qw (
+	buildHarmonicNumberTable
+	encode
+	getHarmonicNumber
+	getParams
+	initParams
+	loadHarmonicNumberTable
+	saveHarmonicNumberTable
+);
+
+
+
+=head1 NAME
+
+ScaleFree - handle scale free distribution
+
+
+=cut
+
+
 use strict;
+use warnings;
+
 
 use Data::Dumper;
 use Carp;
@@ -10,12 +51,20 @@ use Common;
 
 my $debug = 0;
 
+
+#default parameters
+
 my $step = 0.001;
 my $start = 0;
 my $end = 8;
 my $eps = 1e-6;
 my $verbose = 0;
 
+
+=head2 initParams
+
+
+=cut
 sub initParams
 {
 	my %param = @_;

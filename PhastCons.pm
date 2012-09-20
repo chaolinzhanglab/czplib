@@ -16,8 +16,6 @@
 
 package PhastCons;
 
-package Common;
-
 require Exporter;
 
 @ISA = qw (Exporter);
@@ -66,7 +64,7 @@ sub indexBigPhastConsFile
 {
 	my $in = $_[0];
 	my @ret;
-	my $fin = new FileHandle;
+	my $fin;
 	open ($fin, "<$in")|| Carp::croak "can not open file $fin to read\n";
 
 	my $entry = 0;
@@ -163,8 +161,13 @@ Status: tested
 sub readBigPhastConsFile
 {
 	my ($in, $blockInfo, $chromStart, $chromEnd) = @_;
-	my $blockChromStart = $blockInfo->{"chromStart"};
-	my $blockChromEnd = $blockInfo->{"chromEnd"};
+	my $blockChromStart = $blockInfo->{"chromStart"} - 1;
+	my $blockChromEnd = $blockInfo->{"chromEnd"} - 1;
+	#fix 05/08/2011
+	#Note wiggle files are 1-based coordinates, so we convert it into 0-based coordinates
+	#to be consistent with the bed format
+	
+
 	my $step = $blockInfo->{"step"};
 	my @ret;
 	
@@ -173,7 +176,7 @@ sub readBigPhastConsFile
 	my $start = ($blockChromStart >= $chromStart) ? $blockChromStart : $chromStart;
 	my $end = ($blockChromEnd <= $chromEnd) ? $blockChromEnd : $chromEnd;
 
-	my $fin = new FileHandle;
+	my $fin;
 	open ($fin, "<$in") || Carp::croak "can not open file $in to read\n";
 	seek ($fin, $blockInfo->{"pointer"}, 0);	#go to the first line of the block
 

@@ -46,8 +46,7 @@ $ret is an array reference. each element contains:
 sub read1LQFile
 {
 	my $in = $_[0];
-	my $fin = new FileHandle;
-
+	my $fin;
 	open ($fin, "<$in") || Carp::croak "can not open file $in to read\n";
 	while (my $line=<$fin>)
 	{
@@ -106,7 +105,7 @@ sub readCelFile
 	my $in = $_[0];
 	my %ret;
    	
-	my $fin = new FileHandle;
+	my $fin;
 	open ($fin, "<$in") || Carp::croak "can not open file $in to read\n";
 	my $line = <$fin>;
 	$line = <$fin>;
@@ -254,7 +253,7 @@ $ret is an array reference, with each row containing:
 sub readSgrFile
 {
 	my $in = $_[0];
-	my $fin = new FileHandle;
+	my $fin;
 	my @ret;
 	open ($fin, "<$in") || Carp::croak "can not open file $in to read\n";
 	while (my $line =<$fin>)

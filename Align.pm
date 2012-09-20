@@ -615,7 +615,7 @@ sub readSim4File
 	my $match = 0; #total length of matches
 	my $identity = 0; #number of correct bases
 	
-	my $fin = new FileHandle;
+	my $fin;
 	open ($fin, "<$in") || Carp::croak "can not open file $in to read\n";
 	while (my $line=<$fin>)
 	{

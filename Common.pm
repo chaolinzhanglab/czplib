@@ -25,6 +25,7 @@ require Exporter;
 	ABS
 	binomTest
 	bootstrapArray
+	bSearchSupLessThan
 	checkParamType
 	chop_carriage
 	clean_rep
@@ -73,7 +74,6 @@ use warnings;
 
 use Carp;
 use Data::Dumper;
-
 
 no warnings 'recursion';
 
@@ -339,6 +339,56 @@ sub locateArrayElem
 	}	
 	return -1;
 }	
+
+=head bSearchSupLessThan
+binary search to find the max i in [$lowerBound, $upperBound],
+so that $psi->[$i] < $elem
+
+my $i = bSearchSupLessThan ($psi, $elem, $lowerBound = 0, $upperBound = length(@$psi)-1);
+
+
+=cut
+
+sub bSearchSupLessThan
+{
+	my ($psi, $elem, $lowerBound, $upperBound) = @_;
+
+	$lowerBound = 0 unless defined $lowerBound;
+	$upperBound = @$psi - 1 unless defined $upperBound;
+
+	#print "entering bsearch\n";
+	#print "lb=$lowerBound, ub=$upperBound\n";
+
+	return -1 if $lowerBound > $upperBound || $psi->[$lowerBound] >= $elem;
+	return $upperBound if $psi->[$upperBound] < $elem;
+
+	#i is somewhere in between
+	my ($l, $u) = ($lowerBound, $upperBound);  # lower, upper end of search interval
+	
+	my $i;                       # index of probe
+	while ($l <= $u) 
+	{
+		#print "l= $l, u= $u\n";
+		$i = int(($l + $u)/2);
+		if ($psi->[$i+1] < $elem)
+		{
+			#go up
+			$l = $i+1;
+		}
+		elsif ($psi->[$i] >= $elem) 
+		{
+			#go down
+			$u = $i-1;
+		} 
+		elsif ($psi->[$i] < $elem && $psi->[$i+1] >= $elem)
+		{
+			return $i; # found
+		}
+	}
+	return -1;     # not found, it will actually never reaches here
+}
+
+
 
 =head2 shuffleArray
 #randomly shuffle an array
@@ -624,6 +674,7 @@ sub entropy
 	return $entropy;
 }
 
+
 #two tailed binom test
 #a re-implementation of the R binom.test
 sub binomTest
@@ -678,6 +729,8 @@ sub binomTest
 	}
 }
 
+
+use Math::CDF qw(:all);
 #the probability mass function
 sub dbinom
 {

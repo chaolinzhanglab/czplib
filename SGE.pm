@@ -149,8 +149,8 @@ sub checkSGEJobStatus
 	my ($jobIds, $user) = @_;
 	Carp::croak "no job id specified in:", Dumper ($jobIds), "\n" unless @$jobIds > 0;
 	
-	my %jobStatus = map {$_=> 1} @$jobIds;
-
+	my %jobHash = map {$_=> 1} @$jobIds;
+	my %jobStatus;
 	my $cmd = "qstat";
 	$cmd .= " -u $user" if $user;
 
@@ -177,7 +177,7 @@ sub checkSGEJobStatus
 		{
 			next unless $u eq $user;
 		}
-		next unless exists $jobStatus {$id};
+		next unless exists $jobHash {$id};
 		$summary{$status} += 1;
 		$jobStatus{$id} = $status;
 	}

@@ -28,10 +28,14 @@ require Exporter;
 	combineRegions
 	contigToGenome
 	copyBedRegion
+	determineExonReadingFrame
 	geneToExon
 	genomeToContig
+	genomeToTranscript
 	getUniqPaths
+	getGenomicBreakdown
 	lineToBed
+	overlapRegions
 	printBedRegion
 	readBedFile
 	readNextBedBlock
@@ -40,6 +44,7 @@ require Exporter;
 	segmentRegion
 	sortBedFile
 	splitBedFileByChrom
+	transcriptToGenome
 	writeBedFile
 );
 	
@@ -55,6 +60,7 @@ use warnings;
 use Data::Dumper;
 use Carp;
 
+use Common;
 
 
 #
@@ -243,7 +249,7 @@ sub lineToBed
 	{
 		my $blockSizes = $entry->{"blockSizes"};
 		my @bs = split (/\,/, $blockSizes);
-		Carp::croak "in correct number of blocks at line $line\n" if $#bs != $entry->{"blockCount"} - 1;
+		Carp::croak "incorrect number of blocks at line $line\n" if $#bs != $entry->{"blockCount"} - 1;
 		$entry->{"blockSizes"} = \@bs;
 	}
 
@@ -384,7 +390,7 @@ sub splitBedFileByChrom
 
 	my %tagCount;
 
-	my $fin = new FileHandle;
+	my $fin;
 	#print "reading tags from $inBedFile ...\n" if $verbose;
 	open ($fin, "<$inBedFile") || Carp::croak "can not open file $inBedFile to read\n";
 
@@ -411,7 +417,7 @@ sub splitBedFileByChrom
 	
 		if (not exists $fhHash{$chrom})
 		{
-			my $fout = new FileHandle;
+			my $fout;
 			open ($fout, ">>$tmpFile") || Carp::croak "can not open file $tmpFile to write\n";
 			$fhHash{$chrom} = $fout;
 		}
@@ -433,7 +439,7 @@ sub splitBedFileByChrom
 	}
 	close ($fin);
 	#close all file handles
-	foreach my $chrom (keys %fhHash)
+	foreach my $chrom (sort keys %fhHash)
 	{
 		close ($fhHash{$chrom});
 
@@ -669,6 +675,251 @@ sub geneToExon
     return \@exons;
 }
 
+=head2	hasPTC
+
+determine if the stop codon (specified by thickStart, or thickEnd is PTC)
+according to the 50 nt rule
+
+return: 1 if yes, 0 if no
+
+Note:This subroutine will not check the consistency of the reading frame
+
+
+05/07/2011
+
+=cut
+
+
+sub hasPTC
+{
+	my $g = $_[0];
+	Carp::croak "No strand defined: ", Dumper ($g), "\n" unless exists $g->{'strand'};
+	Carp::croak "No blockStarts:", Dumper ($g), "\n" unless exists $g->{'blockStarts'};
+	
+	return 0 if $g->{'blockCount'} < 2;
+
+	my $stopCodon = $g->{'strand'} eq '+' ? $g->{'thickEnd'} : $g->{'thickStart'};
+	my $stopCodonOnTs = genomeToTranscript ($g, $stopCodon);
+
+	my $lastExonJunctionStart = $g->{'strand'} eq '+' ?
+	        $g->{'chromStart'} + $g->{'blockStarts'}->[$g->{'blockCount'}-2] + $g->{'blockSizes'}->[$g->{'blockCount'}-2] - 1 :
+			$g->{'chromStart'} + $g->{'blockStarts'}->[1];
+	
+	my $lastExonJunctionStartOnTs = genomeToTranscript ($g, $lastExonJunctionStart);
+
+	return $lastExonJunctionStartOnTs - $stopCodonOnTs >= 50 ? 1 : 0;
+}
+
+
+=head2 determineExonReadingFrame
+
+determine the reading frame of each exon in a transcript
+each exon is assigned two numbers: chopStart and chopEnd, whose value can be 0, 1, 2, or -1
+
+chopStart: the number of nucleotide to be removed to start a complete codon
+chopEnd: the number of nucleotide after the last complete codon
+
+its easy to see that prevExon.chopStart + currExon.chopEnd = 0 or 3
+
+return 0 if successful, return -1 if the transcript is problematic
+
+We assume the transcript is a proper protein coding transcript, without PTC
+
+=cut
+
+sub determineExonReadingFrame
+{
+	my $g = $_[0];
+	Carp::croak "No strand defined: ", Dumper ($g), "\n" unless exists $g->{'strand'};
+	$g = bedToFull ($g);
+
+	#return -1 unless $g->{'name'} eq 'NM_010828';
+
+	#return -1 if hasPTC ($g);
+
+	my $chrom = $g->{"chrom"};
+	my $chromStart = $g->{"chromStart"};
+	my $chromEnd = $g->{"chromEnd"};
+	my $name = $g->{"name"};
+	
+	my $strand = $g->{"strand"};
+	my $blockSizes = $g->{"blockSizes"};
+	my $blockStarts = $g->{"blockStarts"};
+	my $blockNum = @$blockSizes;
+	
+	my $thickStart = $g->{"thickStart"};
+	my $thickEnd = $g->{"thickEnd"};
+
+
+	for (my $i = 0; $i < $blockNum; $i++)
+	{
+		$g->{"chopStart"}->[$i] = -1;
+		$g->{"chopEnd"}->[$i] = -1;
+	}
+
+	if ($thickStart == $chromStart || $thickEnd == $chromEnd)
+	{
+		#Carp::croak "incomplete ORF: ", Dumper ($g), "\n";
+		#return -1;
+	}
+	
+	#intronless gene
+	if ($blockNum == 1)
+	{
+		my $s = $g->{"blockSizes"}->[0] - ($thickStart - $chromStart) - ($chromEnd - $thickEnd);
+		if ($s % 3 != 0)
+		{
+			Carp::croak "the length of ORF is not the multiple of three: ", Dumper ($g), "\n", bedToLine ($g), "\n";
+			return -1;
+		}
+		
+		$g->{"chopStart"}->[0] = $thickStart - $chromStart;
+		$g->{"chopEnd"}->[0] = $chromEnd - $thickEnd;
+		return 0;
+	}
+
+
+	#print Dumper ($g), "\n";
+	#determine the length of cds
+	my $cdsLen = 0;
+
+	for (my $i = 0; $i < $blockNum; $i++)
+	{
+		$cdsLen += $blockSizes->[$i];
+
+		if($chromStart + $blockStarts->[$i] + $blockSizes->[$i] - 1 < $thickStart)
+		{
+			#5'/3' UTR exon
+			$cdsLen -= $blockSizes->[$i];
+			#next;
+		}
+		elsif ($chromStart + $blockStarts->[$i] <= $thickStart 
+				&& $chromStart + $blockStarts->[$i] + $blockSizes->[$i] - 1 >= $thickStart)
+		{
+			#the (partial) coding exon
+			my $utr = $thickStart -($chromStart + $blockStarts->[$i]);
+			$cdsLen -= $utr;
+		}
+		
+		if ($chromStart + $blockStarts->[$i] > $thickEnd)
+		{
+			#5'/3' exon
+			$cdsLen -= $blockSizes->[$i];
+		}
+		elsif ($chromStart + $blockStarts->[$i] <= $thickEnd
+			&& $chromStart + $blockStarts->[$i] + $blockSizes->[$i] - 1 >= $thickEnd)
+		{
+			my $utr = $chromStart + $blockStarts->[$i] + $blockSizes->[$i] - 1 - $thickEnd;
+			$cdsLen -= $utr;
+		}
+	}
+
+	#print "cds Len = $cdsLen\n";
+	if ($cdsLen % 3 != 0)
+	{
+		Carp::croak "the length of ORF ($cdsLen) is not the multiple of three: ", Dumper ($g), "\n", bedToLine ($g), "\n";
+		return -1;
+	}
+
+	#determine the complete codons
+	my $currCDSLen = 0;
+	
+	for (my $i = 0; $i < $blockNum; $i++)
+	{
+		#5'/3'utr exon on the left of $thickStart
+		if ($chromStart + $blockStarts->[$i] + $blockSizes->[$i] - 1 < $thickStart)
+		{
+			$g->{"chopStart"}->[$i] = -1;
+			$g->{"chopEnd"}->[$i] = -1;
+		}
+		elsif (    $chromStart + $blockStarts->[$i] <= $thickStart 
+				&& $chromStart + $blockStarts->[$i] + $blockSizes->[$i] - 1 >= $thickEnd)
+		
+		{
+			#both thickStart and thickEnd is in the exon
+			$g->{"chopStart"}->[$i] = $thickStart - ($chromStart + $blockStarts->[$i]);
+			$currCDSLen = $thickEnd - $thickStart + 1;
+			$g->{"chopEnd"}->[$i] = $chromStart + $blockStarts->[$i] + $blockSizes->[$i] - 1 - $thickEnd;
+		}
+		elsif ($chromStart + $blockStarts->[$i] <= $thickStart 
+				&& $chromStart + $blockStarts->[$i] + $blockSizes->[$i] - 1 >= $thickStart
+				&& $chromStart + $blockStarts->[$i] + $blockSizes->[$i] - 1 < $thickEnd)
+		{
+			#the exon overlap with thickStart, but not thickEnd
+
+			$g->{"chopStart"}->[$i] = $thickStart - ($chromStart + $blockStarts->[$i]);
+			$currCDSLen = $chromStart + $blockStarts->[$i] + $blockSizes->[$i] - $thickStart;
+			$g->{"chopEnd"}->[$i] = $currCDSLen - int(($currCDSLen+0.5)/3) * 3;
+			
+			my $s = $g->{"blockSizes"}->[$i] - $g->{"chopStart"}->[$i] - $g->{"chopEnd"}->[$i];
+
+			my $exonStart = $chromStart + $blockStarts->[$i]; # + $g->{"chopStart"}->[$i];
+			my $exonEnd = $chromStart + $blockStarts->[$i] + $blockSizes->[$i]; # - $g->{"chopEnd"}->[$i];
+		
+			Carp::croak "$chrom:$exonStart-$exonEnd: $name, block = $i, CDS len = $s, can not be divided by 3\n" 
+			unless $s % 3 == 0;
+		}
+		elsif ($chromStart + $blockStarts->[$i] >= $thickStart && 
+				$chromStart + $blockStarts->[$i] + $blockSizes->[$i] - 1 <= $thickEnd)
+		{
+			#complete coding exon
+			if ($g->{"chopEnd"}->[$i-1] >= 0)
+			{
+				$g->{"chopStart"}->[$i] = (3 - $g->{"chopEnd"}->[$i-1]) % 3;
+			}
+			else
+			{
+				$g->{"chopStart"}->[$i] = 0;
+			}
+			
+			$currCDSLen += $blockSizes->[$i];
+			$g->{"chopEnd"}->[$i] = $currCDSLen - int(($currCDSLen+0.5)/3) * 3;
+			my $s = $g->{"blockSizes"}->[$i] - $g->{"chopStart"}->[$i] - $g->{"chopEnd"}->[$i];
+	
+			my $exonStart = $chromStart + $blockStarts->[$i]; # + $g->{"chopStart"}->[$i];
+			my $exonEnd = $chromStart + $blockStarts->[$i] + $blockSizes->[$i]; # - $g->{"chopEnd"}->[$i];
+			Carp::croak "$chrom:$exonStart-$exonEnd: $name, block = $i, CDS len = $s, can not be divided by 3\n" 
+			unless $s % 3 == 0;
+	
+		}
+		elsif ($chromStart + $blockStarts->[$i] >= $thickStart &&
+				$chromStart + $blockStarts->[$i] <= $thickEnd &&
+				$chromStart + $blockStarts->[$i] + $blockSizes->[$i] - 1 > $thickEnd)
+		{
+			#the exon overlaps with thickEnd, but not thickStart
+
+			if ($g->{"chopEnd"}->[$i-1] >= 0)
+			{
+				$g->{"chopStart"}->[$i] = (3 - $g->{"chopEnd"}->[$i-1]) % 3;
+			}
+			else
+			{
+				$g->{"chopStart"}->[$i] = 0;
+			}
+			
+			$g->{"chopEnd"}->[$i] = $chromStart + $blockStarts->[$i] + $blockSizes->[$i] - 1 - $thickEnd;
+
+			my $s = $g->{"blockSizes"}->[$i] - $g->{"chopStart"}->[$i] - $g->{"chopEnd"}->[$i];
+			
+			my $exonStart = $chromStart + $blockStarts->[$i]; # + $g->{"chopStart"}->[$i];
+			my $exonEnd = $chromStart + $blockStarts->[$i] + $blockSizes->[$i]; # - $g->{"chopEnd"}->[$i];
+		
+			Carp::croak "$chrom:$exonStart-$exonEnd: $name, block = $i, CDS len = $s, can not be divided by 3\n" 
+			unless $s % 3 == 0;
+		}
+		elsif ($chromStart + $blockStarts->[$i] > $thickEnd)
+		{
+			#3'/5' UTR exon
+			$g->{"chopStart"}->[$i] = -1;
+			$g->{"chopEnd"}->[$i] = -1;
+		}
+		else
+		{
+			Carp::croak "$name: block=$i, something wrong not handled properly...\n";
+		}
+	}
+	return 0;
+}
 
 =head2 contigToGenome
 
@@ -752,6 +1003,90 @@ sub genomeToContig
 			chromStart=>$tsOnContigStart, 
 			chromEnd=>$tsOnContigEnd};
 }
+
+=head2 genomeToTranscript
+
+#map a genomic position onto the transcript coordinate system
+#return -1 if no overlap or pos is in intron
+
+=cut
+sub genomeToTranscript
+{
+	my ($ts, $pos) = @_;
+
+	return -1 unless $pos >= $ts->{'chromStart'} && $pos <= $ts->{'chromEnd'};
+
+	bedToFull ($ts) unless exists $ts->{'blockStarts'};
+	my $chromStart = $ts->{'chromStart'};
+
+	my $posOnTs = 0;
+	for (my $i = 0; $i < $ts->{'blockCount'}; $i++)
+	{
+		my $blockStart = $chromStart + $ts->{'blockStarts'}->[$i];
+		my $blockEnd = $blockStart + $ts->{'blockSizes'}->[$i] - 1;
+
+		if ($pos > $blockEnd)
+		{
+			$posOnTs += $ts->{'blockSizes'}->[$i];
+		}
+		else
+		{
+			return -1 unless $pos >= $blockStart; #in intron
+			$posOnTs += ($pos - $blockStart);
+			last;
+		}
+	}
+
+	if ($ts->{'strand'} eq '-')
+	{
+		my $tsLen = sum ($ts->{'blockSizes'});
+		$posOnTs = $tsLen - 1 - $posOnTs;
+	}
+	return $posOnTs;
+}
+
+=head2 transcriptToGenome
+#map a transcript position onto the genomic coordinate system
+#return -1 if no overlap
+
+=cut
+
+sub transcriptToGenome
+{
+	my ($ts, $pos) = @_;
+	
+	#print "pos=$pos, ts=", Dumper ($ts), "\n";
+	bedToFull ($ts) unless exists $ts->{'blockStarts'};
+
+	my $blockSizes = $ts->{'blockSizes'};
+	my $tsLen = sum ($blockSizes);
+	return -1 if $pos < 0 || $pos >= $tsLen;
+
+	if ($ts->{'strand'} eq '-')
+	{
+		$pos = $tsLen - 1 - $pos;
+	}
+
+	my $chromStart = $ts->{'chromStart'};
+
+	my $tsLen2 = 0;
+
+	for (my $i = 0; $i < $ts->{'blockCount'}; $i++)
+	{
+		if ($pos < $tsLen2 + $ts->{'blockSizes'}->[$i])
+		{
+			return $ts->{'chromStart'} + $ts->{'blockStarts'}->[$i] + $pos - $tsLen2;
+		}
+		$tsLen2 += $ts->{'blockSizes'}->[$i];
+	}
+	return -1;
+}
+
+
+
+
+
+
 
 =head2 getUniqPaths
 
@@ -1015,6 +1350,125 @@ sub combineRegions
 	};
 
 	return $region;
+}
+
+
+=head2 overlapRegions
+
+overlapRegions ($regions1UnSorted, $regions2UnSorted)
+
+assume the regions are all on the proper strand of the same chromosomes
+
+For each region $r1 in $regions1, find all regions in $regions2 that overlap with $r1
+return: add an array at $r->{'overlap'} and each entry is the reference to $r2
+
+=cut
+sub overlapRegions
+{
+	my ($regions1UnSorted, $regions2UnSorted) = @_;
+
+	my @regions2 = sort {$a->{"chromStart"} <=> $b->{"chromStart"}} @$regions2UnSorted;
+	my $regions2 = \@regions2;
+
+	my $chromEndExt = 0;
+	foreach my $r2 (@$regions2)
+	{
+		$chromEndExt = $r2->{"chromEnd"} if $r2->{"chromEnd"} > $chromEndExt;
+		$r2->{"chromEndExt"} = $chromEndExt;
+	}
+	
+	my @regions1 = sort {$a->{"chromStart"} <=> $b->{"chromStart"}} @$regions1UnSorted;
+	my $regions1 = \@regions1;
+	
+	my $firstRegion2Idx = 0; #the first $r2 that overlaps with or on the right of the current window
+
+	foreach my $r1 (@$regions1)
+	{
+		
+		my $chromStart = $r1->{"chromStart"};
+		my $chromEnd = $r1->{"chromEnd"};
+		
+		while ($firstRegion2Idx < @$regions2 && $regions2->[$firstRegion2Idx]->{"chromEndExt"} < $chromStart)
+		{
+			$firstRegion2Idx++;
+		}
+		
+		my $i = $firstRegion2Idx;
+		while ($i < @$regions2 && $regions2->[$i]->{"chromStart"} <= $chromEnd)
+		{
+			push @{$r1->{'overlap'}}, $regions2->[$i] if $regions2->[$i]->{"chromEnd"} >= $chromStart;
+			$i++;
+		}
+	}
+}
+
+
+=head2 getGenomicBreakdown
+
+get genomic breakdown annotation for $contigs
+
+getGenomicBreakdown ($breakdown, $contigs, $verbose);
+
+$beakdown: nonoverlapping bed intervals with genomic breakdown (generated by gene2breakdown.pl
+$contigs: bed intervals to be annotated
+$verbose:
+
+return: 
+
+add 'breakdown' to each entry $c in $contigs
+each entry in $c->{'breakdown'} is an interval of CDS (score=1), 5'UTR (score=5) and 3'UTR (score=3)
+they are contig-based coordinates and sorted in ascending order
+
+April 5, 2011
+
+=cut
+sub getGenomicBreakdown
+{
+	my ($breakdown, $contigs, $verbose) = @_;
+	$verbose = 0 unless $verbose;
+
+	my %breakdownHash;
+	map {push @{$breakdownHash{$_->{'strand'}}->{$_->{'chrom'}}}, $_} @$breakdown;
+
+	my %contigHash;
+	map {push @{$contigHash{$_->{'strand'}}->{$_->{'chrom'}}}, $_} @$contigs;
+
+	for my $strand (qw(+ -))
+	{
+		next unless exists $contigHash{$strand};
+
+		print "processing strand $strand ...\n" if $verbose;
+		foreach my $chrom (sort keys %{$contigHash{$strand}})
+		{
+			next unless exists $breakdownHash{$strand} && exists $breakdownHash{$strand}->{$chrom};
+
+			print "processing chrom $chrom ...\n" if $verbose;
+			overlapRegions ($contigHash{$strand}->{$chrom}, $breakdownHash{$strand}->{$chrom});
+
+			foreach my $c (@{$contigHash{$strand}->{$chrom}})
+			{
+				next unless exists $c->{'overlap'};
+
+				my $overlap = $c->{'overlap'};
+				foreach my $r (@$overlap)
+				{
+					my $chromStart = max ($c->{'chromStart'}, $r->{'chromStart'});
+					my $chromEnd = min ($c->{'chromEnd'}, $r->{'chromEnd'});
+					Carp::croak "no overlap between", Dumper ($c), " and ", Dumper ($r), "\n" if $chromStart > $chromEnd;
+					
+					my $r2c = genomeToContig ($c, $chromStart, $chromEnd);
+					$r2c->{'name'} = $r->{'name'};
+					$r2c->{'score'} = $r->{'score'};
+					$r2c->{'strand'} = $r->{'strand'} eq $c->{'strand'} ? '+' : '-';
+					push @{$c->{'breakdown'}}, $r2c;
+					
+					my @r2c = sort {$a->{'chromStart'} <=> $b->{'chromStart'}} @{$c->{'breakdown'}};
+					$c->{'breakdown'} = \@r2c;
+				}
+				delete $c->{'overlap'};
+			}
+		}
+	}
 }
 
 

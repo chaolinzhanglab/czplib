@@ -16,6 +16,9 @@
 
 package Sequence;
 
+use Common;
+use Bed;
+
 require Exporter;
 
 @ISA = qw (Exporter);
@@ -24,6 +27,7 @@ require Exporter;
 	baseComp
 	baseCount
 	complement
+	enumerateSeq
 	generateRandomSeq
 	indexBigFastaFile
 	mutateSeq
@@ -34,6 +38,9 @@ require Exporter;
 	wordcount
 	writeFastaFile
 	writeFastaSeq
+	bedToSeq
+	locateStopCodon
+	isNMDTranscript
 );
 
 
@@ -133,6 +140,7 @@ sub readBigFastaFile
 	#print "readBigFastaFile: id=$id, pointer=$pointer\n";
 	seek ($fin, $pointer, 0); #go to the point
 	my $line = <$fin>;	#head line of the seq
+	chomp $line;
 	Carp::croak "can not find header line for seq $id at $pointer\n" unless $line=~/^\>/;
 	my $id2 = substr($line, 1);
 	my $desc = "";
@@ -255,6 +263,31 @@ sub complement
 	return $str;
 }
 
+
+sub enumerateSeq
+{
+	my $size = $_[0];
+	my $nseq = 4 ** $size - 1;
+
+	my @alphabets = ('A', 'C', 'G', 'T');
+	my @sequences;
+
+	for (my $i = 0; $i <= $nseq; $i++)
+	{
+		my @idx;
+		my $x = $i;
+		while (@idx < $size)
+		{
+			my $a = $x % 4;
+			$x = int ($x / 4);
+			push @idx, $a;
+		}
+
+		my $seq = join ("", reverse @alphabets[@idx]);
+		push @sequences, $seq;
+	}
+	return \@sequences;
+}
 
 sub segmentStr
 {
@@ -463,6 +496,129 @@ sub maskSeqInRegions
 	}
 	return $seqStr;	
 }
+
+=head2 bedToSeq
+
+my $seqStr = bedToSeq ($chromSeq, $bed)
+
+$chromSeq = {id=>, seq=>};
+
+=cut
+sub bedToSeq
+{
+	my ($chromSeq, $bed) = @_;
+	bedToFull ($bed) unless exists $bed->{'blockStarts'};
+	my $name = $bed->{'name'};
+
+	my $seqStr = "";
+	foreach (my $i = 0; $i < $bed->{'blockCount'}; $i++)
+	{
+		my $blockStart = $bed->{'chromStart'} + $bed->{'blockStarts'}->[$i];
+		my $blockSeqStr = substr ($chromSeq->{"seq"}, $blockStart, $bed->{'blockSizes'}->[$i]);
+		Carp::croak "incorrect size for transcript $name, block $i\n" if length ($blockSeqStr) != $bed->{'blockSizes'}->[$i];
+		$seqStr .= $blockSeqStr;
+	}
+
+	return $bed->{'strand'} eq '+' ? $seqStr : revcom ($seqStr);
+}
+
+
+=head2 locateStopCodon
+
+find the stop codon
+return:
+ the last position of the stop codon, -1 if not found
+
+=cut
+sub locateStopCodon
+{
+	my ($seqStr, $start, $checkStartCodon) = @_;
+	$checkStartCodon = 0 unless $checkStartCodon;
+
+	$seqStr = uc($seqStr);
+	
+	if ($checkStartCodon)
+	{
+		return -1 unless substr ($seqStr, $start, 3) eq 'ATG'; 
+	}
+
+	my $pos = $start;
+	my $stop = -1;
+	while (my $codon = substr ($seqStr, $pos, 3))
+	{
+		last if length($codon) < 3;
+		if ($codon eq 'TAA' || $codon eq 'TAG' || $codon eq 'TGA')
+		{
+			$stop = $pos + 2;
+			last;
+		}
+		$pos += 3;
+	}
+	return $stop;
+}
+
+=head2 isNMDTranscript
+
+determine if a transcript is an NMD transcript
+
+my $status = isNMDTranscript ($tsSeqStr, $tsBed);
+
+$tsSeqStr: mRNA sequences
+$tsBed: bed of transcript, start codon has to be determined in advance
+
+return: 
+	1: nmd
+	0: not nmd
+	-1: cannot be determined, because,e.g., the transcript is in complete and no stop codon is found
+	
+	it will also change score, thickStart, thickEnd of $tsBed
+
+=cut
+
+sub isNMDTranscript
+{
+	my ($tsSeqStr, $tsBed) = @_;
+	bedToFull ($tsBed) unless exists $tsBed->{'blockStarts'};
+	
+	#get ORF and NMD of the transcript
+	my $startCodon = $tsBed->{'strand'} eq '+' ? $tsBed->{'thickStart'} : $tsBed->{'thickEnd'};
+	my $startCodonOnTs = genomeToTranscript ($tsBed, $startCodon);
+	Carp::croak "failed to map start codon on to transcript:", Dumper ($tsBed), "\n" if $startCodonOnTs < 0;
+
+	#look for stop codon
+	my $checkStartCodon = 1;
+	my $stopCodonOnTs = locateStopCodon ($tsSeqStr, $startCodonOnTs, $checkStartCodon);
+
+	#stop codon not found
+	if ($stopCodonOnTs < 0)
+	{
+		$tsBed->{'score'} = -1;
+		return -1;
+	}	
+
+	my $stopCodon = transcriptToGenome ($tsBed, $stopCodonOnTs);
+	$tsBed->{'strand'} eq '+' ? $tsBed->{'thickEnd'} = $stopCodon : $tsBed->{'thickStart'} = $stopCodon;
+
+	#ORF OK but no splice, so no NMD
+	if ($tsBed->{'blockCount'} <= 2)
+	{
+		$tsBed->{'score'} = 0; #
+		return 0;
+	}
+
+	#ORF found and there are multiple exons
+	
+	#determine the start of the last exon junction
+	my $lastExonJunctionStart = $tsBed->{'strand'} eq '+' ? 
+		$tsBed->{'chromStart'} + $tsBed->{'blockStarts'}->[$tsBed->{'blockCount'}-2] + $tsBed->{'blockSizes'}->[$tsBed->{'blockCount'}-2] - 1 : 
+		$tsBed->{'chromStart'} + $tsBed->{'blockStarts'}->[1];
+	
+	my $lastExonJunctionStartOnTs = genomeToTranscript ($tsBed, $lastExonJunctionStart);
+	
+	$tsBed->{'score'} = $lastExonJunctionStartOnTs - $stopCodonOnTs >= 50 ? 1 : 0;
+	return $tsBed->{'score'};
+}
+
 
 
 

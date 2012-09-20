@@ -108,7 +108,7 @@ sub readMotifFile
 	
 	my $motifs;
 
-	my $fin = new FileHandle;
+	my $fin;
 	open ($fin, "<$in") || Carp::croak "can not open file $in to read\n";
 	my $line;
 	

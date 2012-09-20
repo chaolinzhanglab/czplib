@@ -23,7 +23,7 @@ sub readRNAplfoldFile
 {
 	my $inFile = $_[0];
 
-	my $fin = new FileHandle;
+	my $fin;
 	open ($fin, "<$inFile") || Carp::croak "can not open file $inFile to read\n";
 
 	my @ret;

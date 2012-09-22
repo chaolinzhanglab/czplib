@@ -41,7 +41,9 @@ Subroutines to handle workspace
 use Carp;
 
 
-my $projHome = "/home2/zhangc/proj";
+my $user = `whoami`;
+chomp $user;
+my $projHome = "/home2/$user/proj";
 $projHome = $ENV {"PROJDIR"} if exists $ENV{"PROJDIR"};
 
 sub getDefaultCache

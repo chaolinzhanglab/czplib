@@ -43,7 +43,7 @@ use Carp;
 
 my $user = `whoami`;
 chomp $user;
-my $projHome = "/home2/$user/proj";
+my $projHome = $ENV {"HOME"} . "/scratch";
 $projHome = $ENV {"PROJDIR"} if exists $ENV{"PROJDIR"};
 
 sub getDefaultCache
@@ -67,7 +67,7 @@ sub getDefaultTmpDir
 sub getGenomeDir
 {
 	my $species =$_[0];
-	my $genomeDir = "$projHome/data/genomes";
+	my $genomeDir = "/ifs/home/c2b2/cz_lab/czlab_data/genomes";
 	return "$genomeDir/mm5"	if ($species eq 'mm5');
 	return "$genomeDir/mm6" if ($species eq 'mm6');
 	return "$genomeDir/mm8" if ($species eq 'mm8');
@@ -80,6 +80,7 @@ sub getGenomeDir
 	return "$genomeDir/ponAbe2" if ($species eq 'ponAbe2');
 	return "$genomeDir/gorGor3" if ($species eq 'gorGor3');
 	return "$genomeDir/rheMac2" if ($species eq 'rheMac2');
+	return "$genomeDir/rheMac3" if ($species eq 'rheMac3');
 	return "$genomeDir/monDom5" if ($species eq 'monDom5');
 	return "$genomeDir/ornAna1" if ($species eq 'ornAna1');
 	return "$genomeDir/rn4" if ($species eq 'rn4');

@@ -76,7 +76,8 @@ Read a Bed File. Only one track is allowed in the file now and header will be ig
 
 my $regions = readBedFile ($inFile, $verbose);
 
-inFile [string]: input Bed file
+inFile [string]: input Bed file, gzip compressed files with .gz extension is allowed
+               : use '-' for stdin
 verbose        : verbose mode
 
 return         : reference to an array
@@ -89,8 +90,22 @@ sub readBedFile
 	my $fin;
 	my @ret;
 
-	open ($fin, "<$inBedFile")||Carp::croak "cannot open file $inBedFile to read\n";
-	
+	if ($inBedFile eq '-')
+	{
+		$fin = *STDIN;
+	}
+	else
+	{
+		if ($inBedFile =~/\.gz$/)
+		{
+			open ($fin, "gunzip -c $inBedFile | ")||Carp::croak "cannot open file $inBedFile to read\n";
+		}
+		else
+		{
+			open ($fin, "<$inBedFile")||Carp::croak "cannot open file $inBedFile to read\n";
+		}
+	}
+
 	my $i = 0;
 	while (my $bedLine = readNextBedLine ($fin))
 	{
@@ -98,7 +113,7 @@ sub readBedFile
 		$i++;
 		push @ret, $bedLine;
 	}
-	close ($fin);
+	close ($fin) if $inBedFile ne '-';
 	return \@ret;
 }
 
@@ -327,11 +342,12 @@ Note:  1. it depends on grep and sort
 
 sub sortBedFile
 {
-		my ($inFile, $outFile, $separateStrand) = @_;
+		my ($inFile, $outFile, $separateStrand, $tmpDir) = @_;
 		my $ncols = `head -n 1 $inFile | awk '{print NF}'`; chomp $ncols;
 		Carp::croak "less than 6 columns\n" if $separateStrand && $ncols < 6;
 
 		my $cmd = "grep -v \"^track\"  $inFile | grep -v \"^#\" | sort";
+		$cmd .= " -T $tmpDir" if $tmpDir && (-d $tmpDir);  #this could be very larger than /tmp, so we might need to specify a separate address
 		$cmd .= " -k 6,6" if $separateStrand;
 		$cmd .= " -k 1,1 -k 2,2n -k 3,3n > $outFile";
 
@@ -346,7 +362,8 @@ Usage:
 
 my $info = splitBedFileByChrom ($inBedFile, $outDir, %params)
 
- inBedFile [string]:
+ inBedFile [string]: gzip compressed file with .gz input is allowed
+                   : use '-' for stdin	 
  outDir    [string]:
  %params           :
 	=> v        : verbose mode (0|1)
@@ -385,14 +402,33 @@ sub splitBedFileByChrom
 		$sort = $params {'sort'} if exists $params {'sort'};
 	}
 
-	Carp::croak "$inBedFile does not exist\n" unless -f $inBedFile;
+	if ($inBedFile ne '-')
+	{
+		Carp::croak "$inBedFile does not exist\n" unless -f $inBedFile;
+	}
+
 	Carp::croak "$outDir does not exist\n" unless -d $outDir;
 
 	my %tagCount;
 
 	my $fin;
 	#print "reading tags from $inBedFile ...\n" if $verbose;
-	open ($fin, "<$inBedFile") || Carp::croak "can not open file $inBedFile to read\n";
+	
+	if ($inBedFile eq '-')
+	{
+		$fin = *STDIN;
+	}
+	else
+	{
+		if ($inBedFile =~/\.gz$/)
+		{
+			open ($fin, "gunzip -c $inBedFile |") || Carp::croak "can not open file $inBedFile to read\n";
+		}
+		else
+		{
+			open ($fin, "<$inBedFile") || Carp::croak "can not open file $inBedFile to read\n";
+		}
+	}
 
 	#my %tagCount;
 	#write tags according to chromosomes
@@ -437,7 +473,8 @@ sub splitBedFileByChrom
 			$tagCount{$chrom} = {f=>"$outDir/$chrom.bed", n=> 1};
 		}
 	}
-	close ($fin);
+	close ($fin) if $inBedFile ne '-';
+
 	#close all file handles
 	foreach my $chrom (sort keys %fhHash)
 	{
@@ -450,7 +487,7 @@ sub splitBedFileByChrom
 				my $f2 = "$f.sort";
 
 				my $separateStrand = $sort > 1 ? 1 : 0;
-				sortBedFile ($f, $f2, $separateStrand);
+				sortBedFile ($f, $f2, $separateStrand, $outDir);
 				system ("mv $f2 $f");
 		}
 	}

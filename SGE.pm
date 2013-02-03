@@ -117,17 +117,20 @@ sub waitUntilSGEJobsDone
 		return 1 unless keys %$status > 0;
 
 		my $summary = $status->{'summary'};
-
+		
+		my $njobs = 0;
 		foreach my $stat (keys %$summary)
 		{
 			Carp::croak "detect failed jobs: ", Dumper ($status), "\n" unless $stat eq 'r' || $stat eq 't' || $stat eq 'qw';
+			$njobs += $summary->{$stat};
 		}
-		my $n = keys %$status;
-		$n--;
+
+		#my $n = keys %$status;
+		#$n--;
 		my $date = `date`;
 		chomp $date;
 			
-		print "$n of $total jobs are not finished yet at $date ...\n" if $verbose && $secondSlept % 60 == 0;
+		print "$njobs tasks of $total jobs are not finished yet at $date ...\n" if $verbose && $secondSlept % 60 == 0;
 		sleep (10); #10 seconds
 		$secondSlept += 10;
 	}
@@ -138,8 +141,10 @@ sub waitUntilSGEJobsDone
 
 my $status = checkSGEJobStatus ($jobIds, $user);
 
-$status->{$jobId} : is the status of job id
-$status->{'summary'}->{$status}: is the number of job of with $status
+$status->{$jobId}{$taskId} : is the status of a specific task of job id
+$taskId is assigned for array jobs, and otherwise 1
+
+$status->{'summary'}->{$status}: is the number of jobs/tasks of with $status
 	
 	
 =cut
@@ -172,14 +177,24 @@ sub checkSGEJobStatus
 		my $id = $cols[0];
 		my $u = $cols[3];
 		my $status = $cols[4];
-		
+		my $taskId = $cols[$#cols];
+	
+		#print $taskId, "\n";
 		if ($user)
 		{
 			next unless $u eq $user;
 		}
 		next unless exists $jobHash {$id};
-		$summary{$status} += 1;
-		$jobStatus{$id} = $status;
+
+		my $ntask = 1;
+		if ($taskId && $taskId=~/^(\d+)-(\d+):/)
+		{
+			$ntask = $2-$1 + 1;
+		}
+		$taskId = 1 unless $taskId;
+
+		$summary{$status} += $ntask;
+		$jobStatus{$id}{$taskId} = $status;
 	}
 		
 	$jobStatus{'summary'} = \%summary;

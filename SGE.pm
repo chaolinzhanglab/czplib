@@ -40,59 +40,6 @@ use Data::Dumper;
 use Carp;
 
 
-=head2 waitUntilQsubDone
-
-note: this function is obsolete
-
-=cut
-
-=obsolete
-sub waitUntilQsubDone
-{
-	my ($user, $jobName, $nSplit, $verbose) = @_;
-	my $secondSlept = 0;
-	while (1)
-	{
-		my @qstat = `qstat -u $user`;
-		#remove title lines
-		if (@qstat)
-		{
-			shift @qstat;
-			shift @qstat;
-		}
-		my $jobNotFinished = 0;
-	
-		foreach my $line (@qstat)
-		{
-			chomp $line;
-			my @cols = split (/\s+/, $line);
-			shift @cols if $cols[0] eq '';
-			my $jname = $cols[2];
-			#print $jname, "\n";
-
-			$jobNotFinished++ if ($jname=~/^$jobName/);
-		}
-
-		if ($jobNotFinished > 0)
-		{
-			$secondSlept += 10;
-			if ($verbose)
-			{
-				my $date = `date`;
-				chomp $date;
-				print "$date: $jobNotFinished of $nSplit jobs are still running...\n" if $verbose && $secondSlept % 60 == 0;
-			}
-			sleep (10);	#10 second
-		}
-		else
-		{
-			print "done\n" if $verbose;
-			last;
-		}
-	}
-}
-=cut
-
 =head2 waitUntilSGEJobsDone
 #return the status of unfinished jobs among a specified list
 

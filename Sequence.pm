@@ -141,7 +141,13 @@ sub readBigFastaFile
 	seek ($fin, $pointer, 0); #go to the point
 	my $line = <$fin>;	#head line of the seq
 	chomp $line;
-	Carp::croak "can not find header line for seq $id at $pointer\n" unless $line=~/^\>/;
+	
+	if ($line!~/^\>/)
+	{
+		return 0;
+		#Carp::croak "can not find header line for seq $id at $pointer\n";
+	}
+
 	my $id2 = substr($line, 1);
 	my $desc = "";
 	if ($id2 =~/^(\S+)\s+(\S.*?)$/)

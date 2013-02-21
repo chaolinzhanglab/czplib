@@ -454,7 +454,7 @@ sub splitBedFileByChrom
 		if (not exists $fhHash{$chrom})
 		{
 			my $fout;
-			open ($fout, ">>$tmpFile") || Carp::croak "can not open file $tmpFile to write\n";
+			open ($fout, ">>$tmpFile") || Carp::croak "can not open file $tmpFile to write: $?\n";
 			$fhHash{$chrom} = $fout;
 		}
 	

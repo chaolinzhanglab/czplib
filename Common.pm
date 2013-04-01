@@ -46,14 +46,13 @@ require Exporter;
 	min
 	norm
 	pow
+	stdev
 	randSeq
 	sampleSeq
 	shuffleArray
 	splitFileByRow
 	sum
 );
-
-
 
 =head1 NAME
 
@@ -483,6 +482,30 @@ sub sampleSeq
 
 
 #/////////////////////////////Math//////////////////////////////////
+
+
+
+# stdev of a vector
+sub stdev
+{
+	die "stdev: incorrect number of parameters.\n" if @_ != 1;
+	my $array = $_[0];
+	
+	Carp::croak "array length is 1\n" if @$array == 1;
+
+	my $sum = 0;
+	
+	my $m = mean ($array);	
+
+	map {$sum+= ($_-$m) ^2} @$array;
+
+	my $n = @$array;
+	return sqrt ($sum/($n-1));
+}
+
+
+
+
 # pow
 sub pow
 {

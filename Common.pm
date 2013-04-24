@@ -27,6 +27,7 @@ require Exporter;
 	bootstrapArray
 	bSearchSupLessThan
 	checkParamType
+	chisq
 	chop_carriage
 	clean_rep
 	cnk

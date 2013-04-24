@@ -698,6 +698,50 @@ sub entropy
 }
 
 
+sub chisq
+{
+    my $dat = $_[0];
+
+    #print Dumper ($dat), "\n";
+    my $nrow = @$dat;
+    my $ncol = @{$dat->[0]};
+
+    my @a; #rowSum / total
+    my @b; #colSum / total
+
+    for (my $i = 0; $i < $nrow; $i++)
+    {
+        $a[$i] = sum($dat->[$i]);
+    }
+
+    for (my $j = 0; $j < $ncol; $j++)
+    {
+        my @x = map {$dat->[$_]->[$j]} (0 .. ($nrow -1));
+        $b[$j] = sum(\@x);
+    }
+
+    my $total = sum (\@a);
+    return 0 if $total <= 0;
+
+    @a = map {$_/$total} @a;
+    @b = map {$_/$total} @b;
+
+    my $chisq = 0;
+    for (my $i = 0; $i < $nrow; $i++)
+    {
+        for (my $j = 0; $j < $ncol; $j++)
+        {
+            my $dat_exp = $a[$i] * $b[$j] * $total;
+            $chisq += ($dat->[$i][$j] - $dat_exp)**2 / $dat_exp if $dat_exp > 0;
+        }
+    }
+    #print "chisq=$chisq\n";
+    return $chisq;
+}
+
+
+
+
 #two tailed binom test
 #a re-implementation of the R binom.test
 sub binomTest

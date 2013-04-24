@@ -37,6 +37,7 @@ require Exporter;
 	enumerateKofN
 	getFullPath
 	getTaxId
+	gscore
 	intersectArray
 	list_to_rep
 	locateArrayElem
@@ -703,7 +704,7 @@ sub chisq
 {
     my $dat = $_[0];
 
-    #print Dumper ($dat), "\n";
+#    print Dumper ($dat), "\n";
     my $nrow = @$dat;
     my $ncol = @{$dat->[0]};
 
@@ -724,21 +725,90 @@ sub chisq
     my $total = sum (\@a);
     return 0 if $total <= 0;
 
+	#print "a=", join ("\t", @a), "\n";
+	#print "b=", join ("\t", @b), "\n";
+
     @a = map {$_/$total} @a;
     @b = map {$_/$total} @b;
 
+	#print "a=", join ("\t", @a), "\n";
+	#print "b=", join ("\t", @b), "\n";
+
     my $chisq = 0;
+
+	#my @tmp;
     for (my $i = 0; $i < $nrow; $i++)
     {
         for (my $j = 0; $j < $ncol; $j++)
         {
             my $dat_exp = $a[$i] * $b[$j] * $total;
-            $chisq += ($dat->[$i][$j] - $dat_exp)**2 / $dat_exp if $dat_exp > 0;
+            $chisq += ($dat->[$i][$j] - $dat_exp) * ($dat->[$i][$j] - $dat_exp) / $dat_exp if $dat_exp > 0;
+			#$tmp[$i][$j] = $dat_exp;
         }
     }
+
+	#print "tmp=", Dumper (\@tmp), "\n";
     #print "chisq=$chisq\n";
     return $chisq;
 }
+
+
+sub gscore
+{
+    my $dat = $_[0];
+
+#    print Dumper ($dat), "\n";
+    my $nrow = @$dat;
+    my $ncol = @{$dat->[0]};
+
+    my @a; #rowSum / total
+    my @b; #colSum / total
+
+    for (my $i = 0; $i < $nrow; $i++)
+    {
+        $a[$i] = sum($dat->[$i]);
+    }
+
+    for (my $j = 0; $j < $ncol; $j++)
+    {
+        my @x = map {$dat->[$_]->[$j]} (0 .. ($nrow -1));
+        $b[$j] = sum(\@x);
+    }
+
+    my $total = sum (\@a);
+    return 0 if $total <= 0;
+
+	#print "a=", join ("\t", @a), "\n";
+	#print "b=", join ("\t", @b), "\n";
+
+    @a = map {$_/$total} @a;
+    @b = map {$_/$total} @b;
+
+	#print "a=", join ("\t", @a), "\n";
+	#print "b=", join ("\t", @b), "\n";
+
+    my $chisq = 0;
+
+	#my @tmp;
+    for (my $i = 0; $i < $nrow; $i++)
+    {
+        for (my $j = 0; $j < $ncol; $j++)
+        {
+            my $dat_exp = $a[$i] * $b[$j] * $total;
+            $chisq += 2 * $dat->[$i][$j] * log($dat->[$i][$j] / $dat_exp) if $dat_exp > 0 && $dat->[$i][$j] > 0;
+
+			#$chisq += ($dat->[$i][$j] - $dat_exp) * ($dat->[$i][$j] - $dat_exp) / $dat_exp if $dat_exp > 0;
+			#$tmp[$i][$j] = $dat_exp;
+        }
+    }
+
+	#print "tmp=", Dumper (\@tmp), "\n";
+    #print "chisq=$chisq\n";
+    return $chisq;
+}
+
+
+
 
 
 

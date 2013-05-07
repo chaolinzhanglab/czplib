@@ -255,7 +255,8 @@ IUB codes, and different cases will be handled properly
 sub revcom
 {
 	my $str = $_[0];
-	return CORE::reverse (complement($str));
+	return scalar reverse (complement($str));
+	#return CORE::reverse (complement($str));
 }
 
 

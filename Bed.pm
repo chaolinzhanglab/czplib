@@ -307,6 +307,10 @@ sub writeBedFile
 	
 	Carp::croak "empty output file name\n" unless $out;
 	
+	if ($out eq '-')
+	{
+		$fout = *STDOUT;
+	}
 	if ($append && $append eq 'a')
 	{
 		open ($fout, ">>$out") || Carp::croak "cannot open file $out to append\n";
@@ -326,7 +330,7 @@ sub writeBedFile
 	
 	map {print $fout bedToLine ($_), "\n";} @$regions;
 
-	close ($fout);
+	close ($fout) if $out ne '-';
 }
 
 

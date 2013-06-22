@@ -29,6 +29,7 @@ require Exporter;
 	contigToGenome
 	copyBedRegion
 	determineExonReadingFrame
+	geneToSize
 	geneToExon
 	genomeToContig
 	genomeToTranscript
@@ -683,6 +684,19 @@ sub removeSmallGap
 
 	return $r;
 }
+
+sub geneToSize
+{
+	my $ts = $_[0];
+	my $tsSize = $ts->{'chromEnd'} - $ts->{'chromStart'} + 1;
+
+    if (exists $ts->{'blockSizes'})
+    {
+        $tsSize = sum ($ts->{'blockSizes'});
+    }
+	return $tsSize;
+}
+
 
 =head2 geneToExon
 

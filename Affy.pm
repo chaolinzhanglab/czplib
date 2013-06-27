@@ -106,11 +106,12 @@ sub readPgfFile
 	while (my $line=<$fin>)
 	{
 		chomp $line;
-		next unless $line =~/pm:st/;
-		
-		$line = reverse ($line);
-		chomp $line;
-		$line = reverse ($line);
+		next unless $line =~/pm\:st/;
+	
+		$line =~/^\s*(\S.*)$/;
+		$line = $1;	
+
+		#$line = reverse ($line);
 
 		my @cols = split ("\t", $line);
 
@@ -122,6 +123,8 @@ sub readPgfFile
 			interrogation_position=>$cols[4],
 			probe_sequence=>$cols[5],
 		};
+		
+		#Carp::croak Dumper (pop @ret), "\n";
 	}
 	close ($fin);
 	return \@ret;

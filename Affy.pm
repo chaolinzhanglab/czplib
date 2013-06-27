@@ -83,6 +83,51 @@ sub read1LQFile
 	return \@ret;
 }
 
+=head2 readPgfFile
+
+read .pgf file that contains probe coordinates and sequences
+
+my $ret = readPgfFile ($inFile)
+
+$ret is an array reference. each element contains:
+
+	X=>
+	Y=>
+	SEQUENCE=>
+	...
+
+=cut
+sub readPgfFile
+{
+	my $in = $_[0];
+	my $fin;
+	open ($fin, "<$in") || Carp::croak "can not open file $in to read\n";
+	my @ret;
+	while (my $line=<$fin>)
+	{
+		chomp $line;
+		next unless $line =~/pm:st/;
+		
+		$line = reverse ($line);
+		chomp $line;
+		$line = reverse ($line);
+
+		my @cols = split ("\t", $line);
+
+		push @ret, {
+			probe_id=>$cols[0],
+			type=>$cols[1],
+			gc_count=>$cols[2],
+			probe_length=>$cols[3],
+			interrogation_position=>$cols[4],
+			probe_sequence=>$cols[5],
+		};
+	}
+	close ($fin);
+	return \@ret;
+}
+
+
 
 
 =head2 readCelFile

@@ -711,21 +711,37 @@ sub gene2exon
 sub geneToExon
 {
     my $g = $_[0];
-    my $nexon = $g->{"blockCount"};
-    my @exons;
-    for (my $i = 0; $i < $nexon; $i++)
-    {
-        my $exonStart = $g->{"chromStart"} + $g->{"blockStarts"}->[$i];
-        my $exonEnd = $exonStart + $g->{"blockSizes"}->[$i] - 1;
-        my $e = {
+
+	my @exons;
+	if (not exists $g->{'blockCount'})
+	{
+		my $e = {
             chrom => $g->{"chrom"},
-            chromStart=> $exonStart,
-            chromEnd => $exonEnd,
-            name => join (":", $g->{"name"}, $i),
+            chromStart=> $g->{'chromStart'},
+            chromEnd => $g->{'chromEnd'},
+            name => join (":", $g->{"name"}, 0),
             score => $g->{"score"},
             strand => $g->{"strand"}
         };
         push @exons, $e;
+    }
+	else
+	{
+	    my $nexon = $g->{"blockCount"};
+	    for (my $i = 0; $i < $nexon; $i++)
+	    {
+	        my $exonStart = $g->{"chromStart"} + $g->{"blockStarts"}->[$i];
+	        my $exonEnd = $exonStart + $g->{"blockSizes"}->[$i] - 1;
+	        my $e = {
+ 	          	chrom => $g->{"chrom"},
+	          	chromStart=> $exonStart,
+				chromEnd => $exonEnd,
+            	name => join (":", $g->{"name"}, $i),
+            	score => $g->{"score"},
+            	strand => $g->{"strand"}
+        	};
+        	push @exons, $e;
+		}
     }
     return \@exons;
 }

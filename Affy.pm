@@ -102,11 +102,29 @@ sub readPgfFile
 	my $in = $_[0];
 	my $fin;
 	open ($fin, "<$in") || Carp::croak "can not open file $in to read\n";
-	my @ret;
+	
 	while (my $line=<$fin>)
 	{
 		chomp $line;
-		next unless $line =~/pm\:st/;
+		next if $line =~/^\s*$/;
+		last if $line =~/^\#\%header2/;
+	}
+
+	my @ret;
+	my ($probesetId, $probesetType, $probesetName) = ("", "", "");
+	while (my $line=<$fin>)
+	{
+		chomp $line;
+		next if $line =~/^\s*$/;
+
+		#print $line, "\n";
+		if ($line=~/^\S/)
+		{
+			($probesetId, $probesetType, $probesetName) = split ("\t", $line);
+			next;
+		}
+
+		#next unless $line =~/pm\:st/;
 	
 		$line =~/^\s*(\S.*)$/;
 		$line = $1;	
@@ -116,6 +134,9 @@ sub readPgfFile
 		my @cols = split ("\t", $line);
 
 		push @ret, {
+			probeset_id=>$probesetId,
+			probeset_type=>$probesetType,
+			probeeset_name=>$probesetName,
 			probe_id=>$cols[0],
 			type=>$cols[1],
 			gc_count=>$cols[2],

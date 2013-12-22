@@ -419,6 +419,8 @@ sub pslToBed
 	my $blockCount = $align->{"blockCount"};
 	my @blockSizes = @{$align->{"blockSizes"}};
 	
+	my $cov = $align->{'matches'} / $align->{'qSize'};
+
 	my $region = {chrom=>$chrom,			#gene id
 		chromStart=>$chromStart,	#start on gene contig
 		chromEnd=>$chromEnd, 	#end on gene contig
@@ -430,7 +432,8 @@ sub pslToBed
 		itemRgb=>"0,0,0",
 		blockCount=>$blockCount,
 		blockSizes=>\@blockSizes,
-		blockStarts=>\@blockStarts
+		blockStarts=>\@blockStarts,
+		cov=>$cov
 	};
 	return $region;
 }
@@ -1306,6 +1309,9 @@ my $bed = samToBed ($sam, $useRNAStrand)
 return 0 if no alignment
 besides all columns for bed format, an additional key is flagInfo, which is decoded flags from SAM format
 
+#TODO: deal with soft clipping
+
+#NOTE: sam2bed.pl in OLego has a separate copy of this function.  Any changes here need to be incoporated in that program
 =cut
 
 sub samToBed
@@ -1346,6 +1352,17 @@ sub samToBed
 	my $QNAME = $sam->{"QNAME"};
 	my $SEQ = $sam->{"SEQ"};
 
+    #remove soft cliped nucleotides
+    if ($CIGAR =~/^\d+S(.*?)$/)
+    {
+        $CIGAR = $1;
+    }
+    elsif ($CIGAR =~/^(.*?)\d+S$/)
+    {
+        $CIGAR = $1;
+    }
+
+	#deal with the rest
 	if ($sam->{"CIGAR"}=~/[^\d+|M|N|I|D]/g)
 	{
 		Carp::croak "unexpected CIGAR string: $CIGAR in $QNAME: $SEQ\n";
@@ -1436,6 +1453,84 @@ sub decodeSamFlag
 	};
 	return $flagInfo;
 }	
+
+
+
+=head2
+
+my $aln = readClustalFile ($inFile)
+read clustal multiple alignment file
+
+=cut
+
+
+=hide
+sub readClustalFile
+{
+	my $inFile = $_[0];
+	my $fin;
+	open ($fin, "<$inFile") || Carp::croak "cannot open file $inFile to read\n";
+
+	my $status = "";
+	my ($seq1, $seq2, $identity) = ("", "", 0);
+	while (my $line=<$fin>)
+	{
+		chomp $line;
+		next if $line=~/^\s*$/;
+		
+		if ($line =~/^\#/ || $line=~/^\%/)
+		{
+			if ($status eq "")
+			{
+				$status = "seq1";
+			}
+			elsif ($status eq "seq1")
+			{
+				$status = "seq2";
+			}
+		}
+		elsif ($status eq "seq1")
+		{
+			$seq1 .= $line;
+		}
+		else
+		{
+			$seq2 .= $line;
+		}
+	}	
+	close ($fd);
+	my ($maskedSeq1, $maskedSeq2, $align) = ("", "", "");
+	for (my $i = 0; $i < length($seq1); $i++)
+	{
+		my $c1 = substr ($seq1, $i, 1);
+		my $c2 = substr ($seq2, $i, 1);
+		if ($c1 eq $c2)
+		{
+			my $c = $c1;
+			$c =~tr/a-z/A-Z/;
+			$maskedSeq1 .= $c;
+			$maskedSeq2 .= $c;
+			$identity++;
+			$align .= "*";
+		}
+		else
+		{
+			$maskedSeq1 .= $c1;
+			$maskedSeq2 .= $c2;
+			$align .=" ";
+		}
+	}
+	$maskedSeq1 =~s/\-//g;
+	$maskedSeq2 =~s/\-//g;
+	my $len1 = length ($maskedSeq1);
+	my $len2 = length ($maskedSeq2);
+	$identity = $identity * 2 / ($len1 + $len2);
+	$identity = sprintf ("%.4f", $identity);
+	return {seq1=>$seq1, seq2=>$seq2, mask1=>$maskedSeq1, mask2=>$maskedSeq2, identity=>$identity, align=>$align};
+}
+
+=cut
+
 
 1;
 

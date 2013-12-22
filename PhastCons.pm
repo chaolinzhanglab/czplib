@@ -65,7 +65,15 @@ sub indexBigPhastConsFile
 	my $in = $_[0];
 	my @ret;
 	my $fin;
-	open ($fin, "<$in")|| Carp::croak "can not open file $fin to read\n";
+
+	if ($in=~/\.gz$/)
+	{
+		open ($fin, "gunzip -c $in | ") ||Carp::croak "cannot open file $in to read\n";
+	}
+	else
+	{
+		open ($fin, "<$in")|| Carp::croak "can not open file $in to read\n";
+	}
 
 	my $entry = 0;
 	my $n = 0;

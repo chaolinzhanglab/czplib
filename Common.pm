@@ -50,6 +50,7 @@ require Exporter;
 	pow
 	stdev
 	randSeq
+	readConfig
 	sampleSeq
 	shuffleArray
 	splitFileByRow
@@ -83,6 +84,31 @@ no warnings 'recursion';
 
 
 my $debug = 0;
+
+
+#read simple configuration files
+#each line is name/value pairs
+#lines that begin with # are comments
+#name = value
+
+sub readConfig
+{
+    my $in = $_[0];
+    my %conf;
+    my $fin;
+    open ($fin, "<$in") || Carp::croak "can not open file $in to read\n";
+    while (my $line=<$fin>)
+    {
+        chomp $line;
+        next if $line=~/^\s*$/;
+        next if $line=~/^\#/;
+        my ($name, $value) = split (/\s*\=\s*/, $line);
+        $conf{$name} = $value;
+    }
+    close ($fin);
+    return \%conf;
+}
+
 
 sub splitFileByRow
 {

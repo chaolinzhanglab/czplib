@@ -7,6 +7,8 @@ require Exporter;
 @EXPORT = qw (
 	readMafFile
 	readNextMafBlock
+	indexBigMafFile
+	readBigMafFile
 	writeMafFile
 	writeMafBlock
 	buildGapMap
@@ -21,6 +23,7 @@ use strict;
 use warnings;
 
 use Carp;
+use Data::Dumper;
 
 
 use Sequence;
@@ -104,7 +107,7 @@ sub readNextMafBlock
 			}
 		}
 	}
-
+	
 	if ($blockFound)
 	{	
 		return \%block;
@@ -113,6 +116,77 @@ sub readNextMafBlock
 	{	return 0;
 	}
 }
+
+
+sub indexBigMafFile
+{
+    my $in = $_[0];
+    my @ret;
+
+    my $fin;
+    open ($fin, "<$in") || Carp::croak "can not open file $fin to read\n";
+
+    #seek ($fin, 0, 0);
+    my $currPos = tell ($fin);
+    my $line = <$fin>;
+
+    my $n = 0;
+
+	my $blockName = "";
+    while (1)
+    {
+        chomp $line;
+        if ($line =~/^\s*$/)
+        {
+            $currPos = tell($fin);
+            my $more = ($line =<$fin>);
+            last unless $more;
+            next;
+        }
+
+        if ($line =~/^\#BLOCK_NAME=(\S*?)$/)
+        {
+			#this is the nonstandard field
+			#if we find a block name, we record it; otherwise, the $blockName will be empty
+			#the pointer will point to the 'a score=XXX' line
+			$blockName = $1;
+            $currPos = tell($fin);
+            my $more = ($line =<$fin>);
+            last unless $more;
+            next;
+        }
+
+        if ($line=~/^a/)
+        {
+            my $entry = {id=>$blockName, pointer=>$currPos};
+            push @ret, $entry;
+        }
+        $currPos = tell($fin);
+
+        my $more = ($line =<$fin>);
+        last unless $more;
+    }
+    close ($fin);
+    return {file=>Common::getFullPath($in), index=>\@ret};
+}
+
+sub readBigMafFile
+{
+	my ($inFile, $blockInfo, $species) = @_;
+
+	#Carp::croak Dumper ($blockInfo), "\n";
+	my $fin;
+	open ($fin, "<$inFile") || Carp::croak "cannot open file $inFile to read\n";
+	my $pointer = $blockInfo->{'pointer'};
+	my $id = $blockInfo->{'id'};
+
+	seek ($fin, $pointer, 0);
+	my $block = readNextMafBlock ($fin, $species);
+	$block->{'name'} = $id if $id ne '';
+	close ($fin);
+	return $block;
+}
+
 
 sub buildGapMap
 {

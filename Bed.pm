@@ -35,6 +35,7 @@ require Exporter;
 	genomeToTranscript
 	getUniqPaths
 	getGenomicBreakdown
+	isUpstreamRegion
 	lineToBed
 	overlapRegions
 	printBedRegion
@@ -335,6 +336,43 @@ sub writeBedFile
 }
 
 
+=head2 isUpstreamRegion
+
+if $r1 is upstream(5') of $r2;
+
+return:
+1 - yes,
+-1 - no,
+0 - overlapping or cannot compare (e.g. not on the same chromosome or strand)
+
+=cut
+
+
+sub isUpstreamRegion
+{
+	my ($r1, $r2) = @_;
+	
+	Carp::croak "no strand information\n" unless exists $r1->{'strand'} && exists $r2->{'strand'};
+	Carp::croak "illegal strand information\n" unless $r1->{'strand'} eq '+' || $r1->{'strand'} eq '-';
+
+	return 0 if $r1->{'chrom'} ne $r2->{'chrom'} || $r1->{'strand'} ne $r2->{'strand'};
+	
+	my $ret = 0;
+
+	if ($r1->{'chromEnd'} < $r2->{'chromStart'})
+	{
+		$ret = 1;
+	}
+	elsif ($r1->{'chromStart'} > $r2->{'chromEnd'})
+	{
+		$ret = -1;
+	}
+
+	$ret *= -1 if $r1->{'strand'} eq '-';
+	
+	return $ret;
+}
+
 =head2 sortBedFile
 
 sort regions by strand (if $separateStrand == 1), then by
@@ -344,6 +382,7 @@ Note:  1. it depends on grep and sort
        2. the input file is assumed to have NO header (to be improved in the future)
        3. input and output files cannot be the same file
 =cut
+
 
 sub sortBedFile
 {
@@ -1321,7 +1360,7 @@ sub combineRegion
 
 sub combineRegions
 {
-	my $regions = $_[0];
+	my ($regions, $checkStrand) = @_;
 	my $nregions = @$regions;
 	
 	my @blocks;
@@ -1330,8 +1369,23 @@ sub combineRegions
 
 	#my @regions = ($region1, $region2);
 
+	my $chrom = $region1->{'chrom'};
+	my $strand = exists $region1->{'strand'} ? $region1->{'strand'} : "";
 	foreach my $region (@$regions)
 	{
+		#add integrity check, make sure the regions to be combined are on the same chromosome, and on the same strand (if requested)
+		#Chaolin Zhang, Dec 20, 2013
+		my $chrom2 = $region->{'chrom'};
+		return {} unless $chrom eq $chrom2;
+
+		if ($checkStrand)
+		{
+			Carp::croak "no strand information in ", Dumper ($region), "\n" unless exists $region->{'strand'};
+
+			my $strand2 = $region->{'strand'};
+			return {} unless $strand eq $strand2;
+		}
+
 		if (exists $region->{"blockStarts"})
 		{
 			for (my $i = 0; $i < @{$region->{"blockStarts"}}; $i++)

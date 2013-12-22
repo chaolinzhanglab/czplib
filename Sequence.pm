@@ -36,6 +36,7 @@ require Exporter;
 	revcom
 	segmentStr
 	wordcount
+	seqEntropy
 	writeFastaFile
 	writeFastaSeq
 	bedToSeq
@@ -503,6 +504,22 @@ sub maskSeqInRegions
 	}
 	return $seqStr;	
 }
+
+
+sub seqEntropy
+{
+	my ($seqStr, $wordSize) = @_;
+
+	my $wordCount = wordcount ($seqStr, $wordSize);
+	my @freq = values %$wordCount;
+	my $s = sum (\@freq);
+	@freq = map {$_/$s} @freq;
+	
+	my $entropy = entropy (\@freq);
+	return $entropy;
+}
+
+
 
 =head2 bedToSeq
 

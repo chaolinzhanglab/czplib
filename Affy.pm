@@ -112,6 +112,8 @@ sub readPgfFile
 
 	my @ret;
 	my ($probesetId, $probesetType, $probesetName) = ("", "", "");
+	my ($atom_id, $exon_position);
+
 	while (my $line=<$fin>)
 	{
 		chomp $line;
@@ -133,18 +135,28 @@ sub readPgfFile
 
 		my @cols = split ("\t", $line);
 
-		push @ret, {
-			probeset_id=>$probesetId,
-			probeset_type=>$probesetType,
-			probeeset_name=>$probesetName,
-			probe_id=>$cols[0],
-			type=>$cols[1],
-			gc_count=>$cols[2],
-			probe_length=>$cols[3],
-			interrogation_position=>$cols[4],
-			probe_sequence=>$cols[5],
-		};
-		
+		if (@cols <=2)
+		{
+			($atom_id, $exon_position) = @cols;
+		}
+		else
+		{
+			push @ret, {
+				probeset_id=>$probesetId,
+				probeset_type=>$probesetType,
+				probeset_name=>$probesetName,
+				atom_id=>$atom_id,
+				exon_position=>$exon_position,
+				probe_id=>$cols[0],
+				type=>$cols[1],
+				gc_count=>$cols[2],
+				probe_length=>$cols[3],
+				interrogation_position=>$cols[4],
+				probe_sequence=>$cols[5],
+			};
+			#Carp::croak Dumper (\@ret), "\n";
+		}
+
 		#Carp::croak Dumper (pop @ret), "\n";
 	}
 	close ($fin);

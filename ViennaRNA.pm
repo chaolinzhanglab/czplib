@@ -1,5 +1,16 @@
 package ViennaRNA;
 
+require Exporter;
+
+@ISA = qw (Exporter);
+
+@EXPORT = qw (
+	readRNAplfoldFile
+	readRNAduplexFile
+);
+
+
+
 =head1 NAME
 
 ViennaRNA - interface of ViennaRNA package
@@ -59,6 +70,34 @@ sub readRNAplfoldFile
 	return \@ret;
 }
 
+
+sub readRNAduplexFile
+{
+    my ($inFile, $engine) = @_;
+
+    Carp::croak "engine=$engine not recognized\n" unless $engine eq 'RNAplex' || $engine eq 'RNAduplex';
+
+    my @ret;
+
+    my $fin;
+    open ($fin, "<$inFile") || Carp::croak "cannot open file $inFile to read\n";
+
+    while (my $line = <$fin>)
+    {
+        next if $line=~/^\s*$/;
+        $line =~/^(\S*?)\s+(\d+)\,(\d+)\s+\:\s+(\d+)\,(\d+)\s+\(\s*(\S*?)\)$/;
+        my %entry = (struct=>$1,
+                    queryStart=>$2,
+                    queryEnd=>$3,
+                    geneStart=>$4,
+                    geneEnd=>$5,
+                    score=>$6);
+
+        push @ret, \%entry;
+    }
+    close ($fin);
+    return \@ret;
+}
 
 1;
 

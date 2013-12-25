@@ -70,10 +70,15 @@ sub readRNAplfoldFile
 	return \@ret;
 }
 
+=head2 readRNAduplexFile
+
+we assume target sequence goes first
+
+=cut
 
 sub readRNAduplexFile
 {
-    my ($inFile, $engine) = @_;
+    my ($inFile, $engine, $sort) = @_;
 
     Carp::croak "engine=$engine not recognized\n" unless $engine eq 'RNAplex' || $engine eq 'RNAduplex';
 
@@ -85,17 +90,21 @@ sub readRNAduplexFile
     while (my $line = <$fin>)
     {
         next if $line=~/^\s*$/;
+		next if $line=~/^\>/;
         $line =~/^(\S*?)\s+(\d+)\,(\d+)\s+\:\s+(\d+)\,(\d+)\s+\(\s*(\S*?)\)$/;
         my %entry = (struct=>$1,
-                    queryStart=>$2,
-                    queryEnd=>$3,
-                    geneStart=>$4,
-                    geneEnd=>$5,
+					targetStart=>$2,
+                    targetEnd=>$3,
+  					queryStart=>$4,
+                    queryEnd=>$5,
                     score=>$6);
 
         push @ret, \%entry;
     }
     close ($fin);
+
+	@ret = sort {$a->{'score'} <=> $b->{'score'}} @ret if $sort;
+
     return \@ret;
 }
 

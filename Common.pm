@@ -332,16 +332,14 @@ sub intersectArray
 {
 	die "arrayDiff: incorrect number of parameters.\n" if @_!= 2;
 	my ($array1, $array2) = @_;
-	my @arrayNew;
-	my $elem;
-	foreach $elem (@$array1)
+
+	my %newArray2 = map {$_=>1} @$array2;
+	my @ret;
+	foreach my $elem (@$array1)
 	{
-		if (locateArrayElem ($array2, $elem) >= 0)
-		{
-			push @arrayNew, $elem;
-		}	
+		push @ret, $elem if exists $newArray2{$elem};
 	}	
-	return \@arrayNew;
+	return \@ret;
 }	
 
 

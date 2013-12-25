@@ -5,17 +5,20 @@ require Exporter;
 @ISA = qw (Exporter);
 
 @EXPORT = qw (
-	readMafFile
-	readNextMafBlock
-	indexBigMafFile
-	readBigMafFile
-	writeMafFile
-	writeMafBlock
 	buildGapMap
 	genomeToMafCoord
+	getSpeciesInMafBlock
 	getSpeciesWithSite
+	indexBigMafFile
+	mafBlockToClustalW
+	maskMafBlock
+	readBigMafFile
+	readMafFile
+	readNextMafBlock
 	siteToTotalBranchLength
 	speciesToTotalBranchLength
+	writeMafFile
+	writeMafBlock
 );
 
 
@@ -51,9 +54,18 @@ sub readMafFile
 	}
 	close ($fin);
 	return \@blocks;
+
 }
 
+=head2 readNextMafBlock
 
+my $block = readNextMafBlock ($fin, $species);
+
+The second parameter, an array of species to extract, is optional
+
+return a hash of a block
+
+=cut
 sub readNextMafBlock
 {
 	my ($fin, $species) = @_;
@@ -270,6 +282,20 @@ sub genomeToMafCoord
 }
 
 
+sub getSpeciesInMafBlock
+{
+	my $block = $_[0];
+	my @species = map {$_->{'src'}} @{$block->{'seq'}};
+    my $refSpecies = $species[0];
+    if ($refSpecies=~/^(\S*?)\./)
+    {
+		#ref species have chromosome attached, remove that
+        $species[0] = $refSpecies;
+    }
+	return \@species;
+}	
+
+
 sub getSpeciesWithSite
 {
 	my ($start, $sequences, $word) = @_;
@@ -339,7 +365,79 @@ sub writeMafBlock
 	print $fout "\n";
 }
 
+=head2 mafBlockToClustalW
 
+my $aln = mafBlockToClustalW ($block, $species);
+convert a block to clustalw alignment format
+
+$species is an array of species to extract, and is optional
+
+=cut
+
+sub mafBlockToClustalW
+{
+	my ($block, $species) = @_;
+
+	my %speciesHash;
+	%speciesHash = map {$_=>1} @$species if $species;
+	
+	my $blockName = $block->{'name'};
+
+	my @sequences;
+
+	my @identity = split(//, $block->{'seq'}[0]->{'text'});
+	foreach my $seq (@{$block->{'seq'}})
+	{
+		my $src = $seq->{'src'};
+		
+		if ($src=~/^(\S*?)\./)
+		{
+			$src = $1;
+		}
+		
+		if ($species)
+		{
+			next unless exists $speciesHash{$src};
+		}
+
+		my $id = $blockName ne '' ? "$blockName.$src" : $src;
+		my $seqStr = $seq->{'text'};
+		$seqStr =~s/\./N/g;
+
+		#dot is not a legal character in clustalw, replace with N
+		#this will cause some ambiguity, but this is probably the best we can do
+		push @sequences, {id=>$id, seq=>$seqStr};
+		
+		my @bases = split(//, $seqStr);
+		for (my $i = 0; $i < @identity; $i++)
+		{
+			$identity[$i] = " " if $identity[$i] ne $bases[$i];
+		}
+	}
+	
+	my @identity2 = map{($_=~/[ACGTacgt]/) ? "*" : " "} @identity;
+	
+	return {sequences=>\@sequences, identity=>join("", @identity2)};
+}
+
+=head2 maskMafBlock
+
+maskMafBlock ($block);
+
+
+mask small letters (repetitive region) by n
+
+=cut
+
+sub maskMafBlock
+{
+	my $block = $_[0];
+	my $seq = $block->{'seq'};
+    foreach my $s (@$seq)
+    {
+    	$s->{'text'} =~tr/a-z/n/;
+    }
+}
 
 
 sub writeMafFile

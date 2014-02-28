@@ -22,8 +22,10 @@ require Exporter;
 
 @EXPORT = qw (
 	lineToSam
+	readSamFile
 	samToLine
 	samToBed
+	writeSamFile
 );
 
 
@@ -43,6 +45,42 @@ use Carp;
 
 
 use Common;
+
+sub readSamFile
+{
+	my ($inFile, $verbose) = @_;
+	my $fin;
+	open ($fin, "<$inFile") || Carp::croak "cannot open file $inFile to read\n";
+	my @ret;
+	my $iter = 0;
+	while (my $line = <$fin>)
+	{
+		chomp $line;
+		next if $line =~/^\s*$/;
+		next if $line =~/^\@/;
+
+		print "$iter ...\n" if $verbose && $iter % 100000 == 0;
+		$iter++;
+		my $s = lineToSam ($line);
+		push @ret, $s;
+	}
+	close ($fin);
+	return \@ret;
+}
+
+sub writeSamFile
+{
+	my ($sam, $outFile) = @_;
+	my $fout;
+	open ($fout, ">$outFile") || Carp::croak "cannot open file $outFile to write\n";
+	foreach my $s (@$sam)
+	{
+		print $fout samToLine ($s), "\n";
+	}
+	close ($fout);
+}
+
+
 
 =head2 lineToSam
 

@@ -491,7 +491,7 @@ sub maskSeqInRegions
 		my $start = $r->{"chromStart"};
 		my $end = $r->{"chromEnd"};
 
-		print "start = $start, end = $end\n";
+		#print "start = $start, end = $end\n";
 
 		$start = 0 if $start < 0;
 		$end = length ($seqStr) - 1 if $end >= length ($seqStr);

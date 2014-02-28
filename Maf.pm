@@ -132,7 +132,7 @@ sub readNextMafBlock
 
 sub indexBigMafFile
 {
-    my $in = $_[0];
+    my ($in, $verbose) = @_;
     my @ret;
 
     my $fin;
@@ -145,6 +145,8 @@ sub indexBigMafFile
     my $n = 0;
 
 	my $blockName = "";
+	my $iter = 0;
+
     while (1)
     {
         chomp $line;
@@ -172,6 +174,9 @@ sub indexBigMafFile
         {
             my $entry = {id=>$blockName, pointer=>$currPos};
             push @ret, $entry;
+
+			print STDERR "$iter ...\n" if $verbose && $iter % 500 == 0;
+			$iter++;
         }
         $currPos = tell($fin);
 

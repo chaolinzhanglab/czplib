@@ -77,6 +77,7 @@ sub getGenomeDir
 	return "$genomeDir/hg18" if ($species eq 'hg18');
 	return "$genomeDir/hg19" if ($species eq 'hg19');
 	return "$genomeDir/panTro3" if ($species eq 'panTro3');
+	return "$genomeDir/panTro4" if ($species eq 'panTro4');
 	return "$genomeDir/ponAbe2" if ($species eq 'ponAbe2');
 	return "$genomeDir/gorGor3" if ($species eq 'gorGor3');
 	return "$genomeDir/rheMac2" if ($species eq 'rheMac2');

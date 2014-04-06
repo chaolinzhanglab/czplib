@@ -72,6 +72,10 @@ sub waitUntilSGEJobsDone
 			$njobs += $summary->{$stat};
 		}
 
+		return 1 if $njobs == 0;
+		#bug fix. different programs/runs might interfere with each other
+		#04/06/2013 Chaolin Zhang
+
 		#my $n = keys %$status;
 		#$n--;
 		my $date = `date`;

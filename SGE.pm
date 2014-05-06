@@ -74,7 +74,7 @@ sub waitUntilSGEJobsDone
 
 		return 1 if $njobs == 0;
 		#bug fix. different programs/runs might interfere with each other
-		#04/06/2013 Chaolin Zhang
+		#04/06/2014 Chaolin Zhang
 
 		#my $n = keys %$status;
 		#$n--;

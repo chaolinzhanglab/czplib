@@ -86,6 +86,7 @@ sub getGenomeDir
 	return "$genomeDir/ornAna1" if ($species eq 'ornAna1');
 	return "$genomeDir/rn4" if ($species eq 'rn4');
 	return "$genomeDir/rn5" if ($species eq 'rn5');
+	return "$genomeDir/bosTau7" if ($species eq 'bosTau7');
 	return "$genomeDir/galGal4" if ($species eq 'galGal4');
 	return "$genomeDir/danRer4" if ($species eq 'danRer4');
 	return "$genomeDir/xenTro3" if ($species eq 'xenTro3');

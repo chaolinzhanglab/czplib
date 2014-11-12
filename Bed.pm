@@ -111,7 +111,7 @@ sub readBedFile
 	my $i = 0;
 	while (my $bedLine = readNextBedLine ($fin))
 	{
-		print STDERR "$i ...\n" if $verbose && $i % 100000 == 0;
+		print "$i ...\n" if $verbose && $i % 100000 == 0;
 		$i++;
 		push @ret, $bedLine;
 	}

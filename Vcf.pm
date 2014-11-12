@@ -246,6 +246,8 @@ sub parseVcfInfo
 	my @pairs = split (";", $infoStr);
 	foreach my $pair (@pairs)
 	{
+		next if $pair eq '.';
+
 		my $name = $pair;
 		if ($pair=~/^(.*?)\=(.*?)$/)
 		{

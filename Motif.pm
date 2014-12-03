@@ -19,11 +19,14 @@ package Motif;
 
 require Exporter;
 
+our $VERSION = 1.01;
+
 @ISA = qw (Exporter);
 
 @EXPORT = qw (
 	allowIUB
 	countMismatch
+	countMismatchBase
 	countToBayesianMatrix
 	countToFrequencyMatrix
 	countToStormoMatrix
@@ -750,17 +753,18 @@ sub countMismatch
 	my @w1 = split (//, $w1);
 	my @w2 = split (//, $w2);
 
-	my $n = 0;
-	map {$n++ if $w1[$_] ne $w2[$_]} (0 .. $#w1);
-	
-	#for(my $i = 0; $i < @w1; $i++)
-	#{
-	#	$n++ if $w1[$i] ne $w2[$i];
-	#}
-	return $n;
+	return countMismatchBase (\@w1, \@w2);
 }
 
-
+#we assume $w1 and $w2 has the same length
+sub countMismatchBase
+{
+	my ($w1, $w2) = @_;
+	my $n = 0;
+	my $l = @$w1;
+	map {$n++ if $w1->[$_] ne $w2->[$_]} (0 .. ($l-1));
+	return $n;
+}
 
 1;
 

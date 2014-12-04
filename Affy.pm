@@ -15,6 +15,9 @@
 
 package Affy;
 
+our $VERSION = 1.01;
+
+
 =head1 NAME
 
 Affy - read and write Affymetrix files

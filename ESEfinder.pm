@@ -144,6 +144,10 @@ use Bio::WebAgent;
 use strict;
 
 use vars qw(@ISA );
+
+
+our $VERSION = 1.01;
+
 #inherits directly from SimpleAnalysisBase
 @ISA = qw(Bio::Tools::Analysis::SimpleAnalysisBase);
 

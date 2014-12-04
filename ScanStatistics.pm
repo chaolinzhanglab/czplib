@@ -20,6 +20,9 @@ require Exporter;
 
 @ISA = qw (Exporter);
 
+our $VERSION = 1.01;
+
+
 @EXPORT = qw (
 	calcScanStatistic
 );

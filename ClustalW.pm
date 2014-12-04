@@ -2,6 +2,8 @@ package ClustalW;
 
 require Exporter;
 
+our $VERSION = 1.01;
+
 @ISA = qw (Exporter);
 
 @EXPORT = qw (

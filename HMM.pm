@@ -9,6 +9,9 @@ use Data::Dumper;
 use Common;
 
 
+our $VERSION = 1.01;
+
+
 =head1 NAME
 
 HMM - Hidden Markov Model

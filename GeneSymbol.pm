@@ -44,6 +44,9 @@ package GeneSymbol;
 use strict;
 use FileHandle;
 use Common;
+
+our $VERSION = 1.01;
+
 #-------------------------------Globals--------------------------------------# 
 my $symbol_file;
 my $hash;

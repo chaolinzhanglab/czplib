@@ -80,6 +80,10 @@ sub getGenomeDir
 	return "$genomeDir/hg19" if ($species eq 'hg19');
 	return "$genomeDir/panTro3" if ($species eq 'panTro3');
 	return "$genomeDir/panTro4" if ($species eq 'panTro4');
+	return "$genomeDir/papAnu2" if ($species eq 'papAnu2');
+	return "$genomeDir/calJac3" if ($species eq 'calJac3');
+	return "$genomeDir/saiBol1" if ($species eq 'saiBol1');
+	return "$genomeDir/micMur1" if ($species eq 'micMur1');
 	return "$genomeDir/ponAbe2" if ($species eq 'ponAbe2');
 	return "$genomeDir/gorGor3" if ($species eq 'gorGor3');
 	return "$genomeDir/rheMac2" if ($species eq 'rheMac2');
@@ -95,6 +99,7 @@ sub getGenomeDir
 	return "$genomeDir/dm2" if ($species eq 'dm2');
 	return "$genomeDir/ce2" if ($species eq 'ce2');
 	return "$genomeDir/sacCer1" if ($species eq 'sacCer1');
+	return "$genomeDir/danRer10" if ($species eq 'danRer10');
 	Carp::croak "can not find the directory for $species\n";
 }
 

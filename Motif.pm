@@ -34,6 +34,7 @@ our $VERSION = 1.01;
 	getMatrixScore
 	getMaxMatrixScore
 	getMinMatrixScore
+	maskWord
 	printMotif
 	readMotifFile
 	readMatchFile
@@ -743,7 +744,7 @@ sub maskWord
 
 sub countMismatch
 {
-	my ($w1, $w2, $ignoreCase) = @_;
+	my ($w1, $w2, $ignoreCase, $maxDiff) = @_;
 
 	$w1 =~tr/a-z/A-Z/ if $ignoreCase;
 	$w2 =~tr/a-z/A-Z/ if $ignoreCase;
@@ -753,16 +754,25 @@ sub countMismatch
 	my @w1 = split (//, $w1);
 	my @w2 = split (//, $w2);
 
-	return countMismatchBase (\@w1, \@w2);
+	return countMismatchBase (\@w1, \@w2, $maxDiff);
 }
 
 #we assume $w1 and $w2 has the same length
+#
+# my $n = countMismatchBase (\@w1, \@w2, $maxDiff);
+
 sub countMismatchBase
 {
-	my ($w1, $w2) = @_;
+	my ($w1, $w2, $maxDiff) = @_;
 	my $n = 0;
 	my $l = @$w1;
-	map {$n++ if $w1->[$_] ne $w2->[$_]} (0 .. ($l-1));
+	$maxDiff = $l unless $maxDiff;	
+
+	for (my $i = 0; $i < $l; $i++)
+	{
+		$n++ if $w1->[$i] ne $w2->[$i];
+		last if $n >= $maxDiff;
+	}
 	return $n;
 }
 

@@ -35,6 +35,8 @@ our $VERSION = 1.01;
 	chop_carriage
 	clean_rep
 	cnk
+	cnkln
+	count2prob
 	dbinom
 	diffArray
 	entropy
@@ -42,6 +44,8 @@ our $VERSION = 1.01;
 	getFullPath
 	getTaxId
 	gscore
+	hypergeoTest
+	hypergeo
 	intersectArray
 	list_to_rep
 	locateArrayElem
@@ -527,7 +531,7 @@ sub stdev
 	
 	my $m = mean ($array);	
 
-	map {$sum+= ($_-$m) ^2} @$array;
+	map {$sum+= ($_-$m) **2} @$array;
 
 	my $n = @$array;
 	return sqrt ($sum/($n-1));
@@ -552,7 +556,7 @@ sub norm
 	my $array = $_[0];
 	my $sum = 0;
 	
-	map {$sum+= $_ ^2} @$array;
+	map {$sum+= $_ **2} @$array;
 
 	#my $elem;
 	#foreach $elem (@$array)
@@ -562,6 +566,20 @@ sub norm
 	$sum = sqrt ($sum);
 	return $sum;
 }
+
+sub count2prob
+{
+	die "count2prob: incorrect number of parameters.\n" if @_ != 1 && @_!= 2;
+    my ($array, $pseudoCount) = @_;
+	$pseudoCount = 0 unless $pseudoCount;
+
+    my $s = sum ($array);
+	my $n = @$array;
+
+	my @ret = map{($_+$pseudoCount)/($s+$pseudoCount * $n)} @$array;
+	return \@ret;
+}
+
 
 
 sub max
@@ -904,6 +922,53 @@ sub dbinom
 	return $x >= 1 ? pbinom ($x, $n, $p) - pbinom ($x - 1, $n, $p) : pbinom($x, $n, $p);
 }
 
+
+#hypergeometric probability
+
+sub hypergeoTest
+{
+    my ($m, $k, $N, $n) = @_;
+
+    my $pval = 0;
+    for (my $i = $k; $i <= Common::min($n, $m); $i++)
+    {
+        my $p = hypergeo ($m, $i, $N, $n);
+        #print "hypergeo ($m, $i, $N, $n) = $p ...\n";
+        $pval += $p;
+    }
+    return $pval;
+}
+
+sub hypergeo
+{
+    my ($m, $k, $N, $n) = @_;
+    my $logP = cnkln($m, $k) + cnkln ($N-$m, $n-$k) - cnkln ($N, $n);
+    return exp($logP);
+}
+
+{
+    my @cache;
+    $cache[0] = 0;
+    $cache[1] = 0;
+
+    sub factorln
+    {
+        my $n = shift;
+        return $cache[$n] if defined $cache[$n];
+        return undef if $n < 0;
+        for (my $i = scalar(@cache); $i <= $n; $i++)
+        {
+            $cache[$i] = $cache[$i-1] + log($i);
+        }
+        return $cache[$n];
+    }
+}
+
+sub cnkln
+{
+    my ($n, $k) = @_;
+    return factorln($n) - factorln($k) - factorln($n-$k);
+}
 
 
 #/////////////////////////Clustering////////////////////////////////

@@ -113,7 +113,7 @@ sub readBedFile
 	my $i = 0;
 	while (my $bedLine = readNextBedLine ($fin))
 	{
-		print "$i ...\n" if $verbose && $i % 100000 == 0;
+		print STDERR "$i ...\n" if $verbose && $i % 100000 == 0;
 		$i++;
 		push @ret, $bedLine;
 	}
@@ -489,7 +489,7 @@ sub splitBedFileByChrom
 
 		$i++;
 
-		print "$i ...\n" if $i % 100000 == 0 && $verbose;
+		print STDERR "$i ...\n" if $i % 100000 == 0 && $verbose;
 	
 		$line =~/(\S+)\s/;
 
@@ -528,7 +528,7 @@ sub splitBedFileByChrom
 
 		if ($sort)
 		{
-				print "sorting $chrom ...\n" if $verbose;
+				print STDERR "sorting $chrom ...\n" if $verbose;
 				my $f = $tagCount{$chrom}->{'f'};
 				my $f2 = "$f.sort";
 

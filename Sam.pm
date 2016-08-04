@@ -24,6 +24,7 @@ our $VERSION = 1.01;
 
 @EXPORT = qw (
 	lineToSam
+	decodeSamFlag
 	readSamFile
 	samToLine
 	samToBed

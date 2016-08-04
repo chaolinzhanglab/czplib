@@ -93,7 +93,7 @@ sub readRNAduplexFile
     {
         next if $line=~/^\s*$/;
 		next if $line=~/^\>/;
-        $line =~/^(\S*?)\s+(\d+)\,(\d+)\s+\:\s+(\d+)\,(\d+)\s+\(\s*(\S*?)\)$/;
+        $line =~/^(\S*?)\s+(\d+)\,(\d+)\s+\:\s+(\d+)\,(\d+)\s+\(\s*(\S*?)\).*$/;
         my %entry = (struct=>$1,
 					targetStart=>$2,
                     targetEnd=>$3,

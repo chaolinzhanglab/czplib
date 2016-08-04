@@ -16,13 +16,15 @@
 
 package Sequence;
 
+use Bio::SeqIO;
+
 use Common;
 use Bed;
 
 require Exporter;
 
 
-our $VERSION = 1.01;
+our $VERSION = 1.02;
 
 
 @ISA = qw (Exporter);
@@ -222,25 +224,46 @@ sub writeFastaSeq
 
 =head2 wordcount
 
-count the number of all n-mer in a DNA/RNA sequence (case insensitive, i.e. sequeuence will be converted into upper case)
+count the number of all n-mer in one or more DNA/RNA sequences (case insensitive, i.e. sequeuence will be converted into upper case)
 
 my $wordHash = wordcount ($seqStr, $wordSize)
+my $wordHash = wordcount ($seqStr, $wordSize, {wordHash=>$oldWordHash)
+my $wordHash = wordcount ($inFastaFile, $wordSize, {fasta=>1})
 
 =cut
 
 sub wordcount
 {
-	my ($seqStr, $wordSize) = @_;
-	my $seqLen = length ($seqStr);
-	$seqStr = uc ($seqStr);
-	my %wordHash;
-	for (my $i = 0; $i < length ($seqStr) - $wordSize + 1; $i++)
+	my ($seqStr, $wordSize, $opt) = @_;
+	
+	my $isFasta = exists $opt->{'fasta'} ? $opt->{'fasta'} : 0;
+	my $wordHash = exists $opt->{'wordHash'} ? $opt->{'wordHash'} : {};
+	my $noMask = exists $opt->{'noMask'} ? $opt->{'noMask'} : 0;
+	
+	if ($isFasta)
 	{
-		my $w = substr ($seqStr, $i, $wordSize);
-		next if $w=~/[^ACGT]/;
-		$wordHash{$w}++;
+		my $inFile = $seqStr;
+		my $seqIO = Bio::SeqIO->new (-file =>$inFile, -format => 'Fasta');
+		while (my $seq = $seqIO->next_seq())
+		{
+			$wordHash = wordcount ($seq->seq(), $wordSize, {wordHash=>$wordHash, noMask=>$noMask});
+		}
+    }
+	else
+	{
+		my $seqLen = length ($seqStr);
+		$seqStr = uc ($seqStr);
+		for (my $i = 0; $i < length ($seqStr) - $wordSize + 1; $i++)
+		{
+			my $w = substr ($seqStr, $i, $wordSize);
+			if ($noMask == 0)
+			{
+				next if $w=~/[^ACGTU]/;
+			}
+			$wordHash->{$w}++;
+		}
 	}
-	return \%wordHash;
+	return $wordHash;
 }
 
 
@@ -543,7 +566,11 @@ sub bedToSeq
 	{
 		my $blockStart = $bed->{'chromStart'} + $bed->{'blockStarts'}->[$i];
 		my $blockSeqStr = substr ($chromSeq->{"seq"}, $blockStart, $bed->{'blockSizes'}->[$i]);
-		Carp::croak "incorrect size for transcript $name, block $i\n" if length ($blockSeqStr) != $bed->{'blockSizes'}->[$i];
+		if (length ($blockSeqStr) != $bed->{'blockSizes'}->[$i])
+		{
+			warn "incorrect size for transcript $name, block $i\n";
+			return "";
+		}
 		$seqStr .= $blockSeqStr;
 	}
 

@@ -24,6 +24,8 @@ our $VERSION = 1.01;
 
 @EXPORT = qw (
 	readConfigFile
+	readASConfigFile
+	readExprConfigFile
 	readExprDataFile
 	readASDataFile
 	readBed6DataFile
@@ -47,6 +49,11 @@ use Carp;
 
 use Common;
 
+
+=head2
+readConfigFile - obsolete now
+
+=cut
 
 sub readConfigFile
 {
@@ -78,6 +85,63 @@ sub readConfigFile
     return \%groups;
 }
 
+sub readASConfigFile
+{
+    my ($configFile, $base, $type) = @_;
+    my $fin;
+    open ($fin, "<$configFile") || Carp::croak "cannot open file $configFile to read\n";
+    my $i = 0;
+    my %groups;
+
+    while (my $line = <$fin>)
+    {
+        chomp $line;
+        next if $line=~/^\s*$/;
+        next if $line=~/^\#/;
+        my ($sampleName, $groupName) = split (/\t/, $line);
+        $groups{$groupName}->{"id"} = $i++ unless exists $groups{$groupName};
+        push @{$groups{$groupName}->{"samples"}}, $sampleName;
+
+		#check whether input file exists
+        my $inputFile = $base ne '' ? "$base/$sampleName" : $sampleName;
+        if (-d $inputFile)
+        {
+			Carp::croak "undefined type?\n" unless $type;
+            $inputFile = "$inputFile/$type.count.txt";
+        }
+        Carp::croak "Input file $inputFile does not exist\n" unless -f $inputFile;
+    }
+    close ($fin);
+    return \%groups;
+}
+
+sub readExprConfigFile
+{
+    my ($configFile, $base, $suffix) = @_;
+    my $fin;
+    open ($fin, "<$configFile") || Carp::croak "cannot open file $configFile to read\n";
+    my $i = 0;
+    my %groups;
+
+    while (my $line = <$fin>)
+    {
+        chomp $line;
+        next if $line=~/^\s*$/;
+        next if $line=~/^\#/;
+        my ($sampleName, $groupName) = split (/\t/, $line);
+
+		$sampleName .= $suffix if $suffix;
+
+        $groups{$groupName}->{"id"} = $i++ unless exists $groups{$groupName};
+        push @{$groups{$groupName}->{"samples"}}, $sampleName;
+
+		#check whether input file exists
+        my $inputFile = $base ne '' ? "$base/$sampleName" : $sampleName;
+        Carp::croak "Input file $inputFile does not exist\n" unless -f $inputFile;
+    }
+    close ($fin);
+    return \%groups;
+}
 
 
 =head2 readExprDataFile

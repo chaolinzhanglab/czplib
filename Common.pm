@@ -20,7 +20,7 @@ package Common;
 require Exporter;
 
 
-our $VERSION = 1.01;
+our $VERSION = 1.02;
 
 
 @ISA = qw (Exporter);
@@ -738,9 +738,16 @@ sub entropy
 	my $dist = $_[0];
 	my $entropy = 0;
 
-	foreach my $p (@$dist)
+	my @d = @$dist;
+	my $s = sum($dist);
+	if ($s != 1)
 	{
-		$entropy -= $p * log($p) / log(2);
+		@d = map {$_/$s} @d;	
+	}
+
+	foreach my $p (@d)
+	{
+		$entropy -= $p > 0 ? $p * log($p) / log(2) : 0;
 	}
 	return $entropy;
 }

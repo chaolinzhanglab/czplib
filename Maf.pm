@@ -136,8 +136,10 @@ sub readNextMafBlock
 
 sub indexBigMafFile
 {
-    my ($in, $verbose) = @_;
+    my ($in, $verbose, $msgio) = @_;
     my @ret;
+
+	$msgio = *STDOUT unless $msgio;
 
     my $fin;
     open ($fin, "<$in") || Carp::croak "can not open file $fin to read\n";
@@ -179,7 +181,7 @@ sub indexBigMafFile
             my $entry = {id=>$blockName, pointer=>$currPos};
             push @ret, $entry;
 
-			print STDERR "$iter ...\n" if $verbose && $iter % 500 == 0;
+			print $msgio "$iter ...\n" if $verbose && $iter % 500 == 0;
 			$iter++;
         }
         $currPos = tell($fin);

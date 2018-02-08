@@ -79,6 +79,9 @@ sub waitUntilSGEJobsDone
 		#bug fix. different programs/runs might interfere with each other
 		#04/06/2014 Chaolin Zhang
 
+		#TODO: check whether each job finished correctly by running qacct
+
+
 		#my $n = keys %$status;
 		#$n--;
 		my $date = `date`;

@@ -188,8 +188,8 @@ sub samToBed
     {
         $CIGAR = $1;
     }
-    
-	if ($CIGAR =~/^(.*?)\d+S$/)
+
+    if ($CIGAR =~/^(.*?)\d+S$/)
     {
         $CIGAR = $1;
     }

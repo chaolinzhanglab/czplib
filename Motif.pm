@@ -19,7 +19,7 @@ package Motif;
 
 require Exporter;
 
-our $VERSION = 1.01;
+our $VERSION = 1.02;
 
 @ISA = qw (Exporter);
 
@@ -170,6 +170,13 @@ sub readMotifFile
 			$motif->{'BF'} = $1;
 			next;
 		}
+
+		if ($line =~/^IC/)
+		{
+			$line =~/^IC\s+(\S+.*?)$/;
+			my @cols = split (/\s+/, $1);
+			$motif->{'IC'} = \@cols;
+		}
 		
 		if ($line =~/^P0/)
 		{
@@ -186,6 +193,19 @@ sub readMotifFile
 					{A=>($cols[0]), C=>($cols[1]), G=>($cols[2]), T=>($cols[3])};
 			}
 			#no next here
+		}
+
+		if ($line =~/^XL/)
+		{
+			while ($line = <$fin>)
+            {
+                chomp $line;
+                last unless $line =~/\d+/;
+
+                #print $line, "\n";
+                my @cols = split (/\s+/, $line);
+                push @{$motif->{'XL'}}, $cols[1];
+            }
 		}
 		
 		if ($line =~/^CO/)

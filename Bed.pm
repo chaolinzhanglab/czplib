@@ -78,21 +78,24 @@ my $debug = 0;
 
 Read a Bed File. Only one track is allowed in the file now and header will be ignored
 
-my $regions = readBedFile ($inFile, $verbose);
+my $regions = readBedFile ($inFile, $verbose, $msgio);
 
 inFile [string]: input Bed file, gzip compressed files with .gz extension is allowed
                : use '-' for stdin
 verbose        : verbose mode
+msgio          : file handle for message output
 
 return         : reference to an array
 =cut
 
 sub readBedFile
 {
-	my ($inBedFile, $verbose) = @_;
+	my ($inBedFile, $verbose, $msgio) = @_;
 
 	my $fin;
 	my @ret;
+
+	$msgio = *STDOUT unless $msgio;
 
 	if ($inBedFile eq '-')
 	{
@@ -113,7 +116,7 @@ sub readBedFile
 	my $i = 0;
 	while (my $bedLine = readNextBedLine ($fin))
 	{
-		print STDERR "$i ...\n" if $verbose && $i % 100000 == 0;
+		print $msgio "$i ...\n" if $verbose && $i % 100000 == 0;
 		$i++;
 		push @ret, $bedLine;
 	}
@@ -431,10 +434,12 @@ sub splitBedFileByChrom
 
 	my $inBedFile = shift @_;
 	my $outDir = shift @_;
-
+	
 	#optional parameters
 	my $verbose = 0; #verbose mode
 	my $sort = 0;	#sort by chrom, then by chromStart, and then by chromEnd, if sort ==2, sort by strand first
+	my $msgio = *STDOUT;
+
 	my %params;
 
 	if (@_ == 1)
@@ -446,6 +451,7 @@ sub splitBedFileByChrom
 		%params = @_;
 		$verbose = $params{'v'} if exists $params{'v'};
 		$sort = $params {'sort'} if exists $params {'sort'};
+		$msgio = $params {'msgio'} if exists $params {'msgio'};
 	}
 
 	if ($inBedFile ne '-')
@@ -489,7 +495,7 @@ sub splitBedFileByChrom
 
 		$i++;
 
-		print STDERR "$i ...\n" if $i % 100000 == 0 && $verbose;
+		print $msgio "$i ...\n" if $i % 100000 == 0 && $verbose;
 	
 		$line =~/(\S+)\s/;
 
@@ -528,7 +534,7 @@ sub splitBedFileByChrom
 
 		if ($sort)
 		{
-				print STDERR "sorting $chrom ...\n" if $verbose;
+				print $msgio "sorting $chrom ...\n" if $verbose;
 				my $f = $tagCount{$chrom}->{'f'};
 				my $f2 = "$f.sort";
 

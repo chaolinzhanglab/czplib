@@ -80,7 +80,10 @@ my %vcfInfoFieldHash = (
 
 sub readVcfFile
 {
-	my ($inFile, $verbose) = @_;
+	my ($inFile, $verbose, $msgio) = @_;
+
+	$msgio = *STDOUT unless $msgio;
+
 	my $fin;
 	my @ret;
 
@@ -91,7 +94,7 @@ sub readVcfFile
 		chomp $line;
 		next if $line =~/^\#/;
 		next if $line =~/^\s*$/;
-		print STDERR "$iter ...\n" if $verbose && $iter % 500000 == 0;
+		print $msgio "$iter ...\n" if $verbose && $iter % 500000 == 0;
 		$iter++;
 
 		my $snv = lineToVcf ($line);
@@ -111,7 +114,9 @@ sub generateVcfHeader
 
 sub writeVcfFile
 {
-	my ($sites, $outFile, $verbose) = @_;
+	my ($sites, $outFile, $verbose, $msgio) = @_;
+
+	$msgio = *STDOUT unless $msgio;
 
 	my $fout;
 	open ($fout, ">$outFile") || Carp::croak "cannot open file $outFile to write\n";
@@ -119,7 +124,7 @@ sub writeVcfFile
 
 	for (my $i = 0; $i < @$sites; $i++)
 	{
-		print STDERR "$i ...\n" if $verbose && $i % 500000 == 0;
+		print $msgio "$i ...\n" if $verbose && $i % 500000 == 0;
 		print $fout vcfToLine ($sites->[$i]), "\n";
 	}
 	close ($fout);
@@ -131,7 +136,7 @@ sub writeVcfFile
 
 sub splitVcfFileByChrom
 {
-	my ($inFile, $outDir, $verbose) = @_;
+	my ($inFile, $outDir, $verbose, $msgio) = @_;
 
 	if ($inFile ne '-')
 	{
@@ -139,6 +144,9 @@ sub splitVcfFileByChrom
 	}
 
 	Carp::croak "$outDir does not exist\n" unless -d $outDir;
+
+
+	$msgio = *STDOUT unless $msgio;
 
 	my %siteCount;
 
@@ -173,7 +181,7 @@ sub splitVcfFileByChrom
 
 		$i++;
 
-		print STDERR "$i ...\n" if $i % 500000 == 0 && $verbose;
+		print $msgio "$i ...\n" if $i % 500000 == 0 && $verbose;
 	
 		$line =~/(\S+)\s/;
 

@@ -188,13 +188,13 @@ sub samToBed
     {
         $CIGAR = $1;
     }
-    elsif ($CIGAR =~/^(.*?)\d+S$/)
+    if ($CIGAR =~/^(.*?)\d+S$/)
     {
         $CIGAR = $1;
     }
 
 	#deal with the rest
-	if ($sam->{"CIGAR"}=~/[^\d+|M|N|I|D]/g)
+	if ($CIGAR=~/[^\d+|M|N|I|D]/g)
 	{
 		Carp::croak "unexpected CIGAR string: $CIGAR in $QNAME: $SEQ\n";
 	}

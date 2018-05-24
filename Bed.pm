@@ -18,7 +18,7 @@ package Bed;
 
 require Exporter;
 
-our $VERSION = 1.01;
+our $VERSION = 1.02;
 
 @ISA = qw (Exporter);
 
@@ -63,6 +63,8 @@ use warnings;
 
 use Data::Dumper;
 use Carp;
+
+use sort 'stable'; #added by Chaolin Zhang on Feb 14, 2018
 
 use Common;
 
@@ -397,7 +399,7 @@ sub sortBedFile
 
 		my $cmd = "grep -v \"^track\"  $inFile | grep -v \"^#\" | sort";
 		$cmd .= " -T $tmpDir" if $tmpDir && (-d $tmpDir);  #this could be very larger than /tmp, so we might need to specify a separate address
-		$cmd .= " -k 6,6" if $separateStrand;
+		$cmd .= " -s -k 6,6" if $separateStrand;
 		$cmd .= " -k 1,1 -k 2,2n -k 3,3n > $outFile";
 
 		#print $cmd, "\n" if $verbose;

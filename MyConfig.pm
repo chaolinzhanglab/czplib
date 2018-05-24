@@ -18,7 +18,7 @@ package MyConfig;
 
 require Exporter;
 
-our $VERSION = 1.01;
+our $VERSION = 1.02;
 
 @ISA = qw (Exporter);
 
@@ -78,6 +78,7 @@ sub getGenomeDir
 	return "$genomeDir/hg17" if ($species eq 'hg17');
 	return "$genomeDir/hg18" if ($species eq 'hg18');
 	return "$genomeDir/hg19" if ($species eq 'hg19');
+	return "$genomeDir/hg38" if ($species eq 'hg38');
 	return "$genomeDir/panTro3" if ($species eq 'panTro3');
 	return "$genomeDir/panTro4" if ($species eq 'panTro4');
 	return "$genomeDir/papAnu2" if ($species eq 'papAnu2');

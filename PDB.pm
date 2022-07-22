@@ -107,7 +107,10 @@ sub getPrimarySeq
     for my $res ($struct->get_residues ($chain))
     {
         my $resid = $res->id;
+		#print $resid, "\n";
         my ($r, $n) = split("-", $resid);
+		next if $r eq 'HOH';
+		next if $r eq '6U0' || $r eq 'UVP' || $r eq 'GTP' || $r eq 'G5J'; #just workaround
         push @seq, $r; # assume HETATOM has been removed
     }
 
@@ -115,6 +118,11 @@ sub getPrimarySeq
 
     my $type = "";
     my $seqStr = "";
+
+	#print "chain=", $chain->id, "\n";
+
+	#print Dumper (\@seq), "\n";
+
     if (length ($seq[0]) == 3)
     {
         if (three2one($seq[0]))
@@ -124,24 +132,33 @@ sub getPrimarySeq
             {
                 if (length ($res) != 3)
 				{
-					if ($res eq 'DA' || $res eq 'DC' || $res eq 'DG' || $res ne 'DT')
-                	{
-						#DNA adduct?
-						return 0;
-					}
-					else
-					{
-                    	Carp::croak "unknown amino acid: $res in ", Dumper (\@seq), "\n";
-					}
+					#can be small molecule, eg. 1CVJ
+					warn "unknown amino acid: $res\n";
+					next;
+
+					#if ($res eq 'DA' || $res eq 'DC' || $res eq 'DG' || $res eq 'DT')
+                	#{
+					#	#DNA adduct?
+					#	return 0;
+					#}
+					#else
+					#{
+                    #	Carp::croak "unknown amino acid: $res in ", Dumper (\@seq), "\n";
+					#}
                 }
 
                 if (my $aa = three2one ($res))
                 {
                     $seqStr .= $aa;
                 }
-                elsif ($res eq 'UNK' || $res eq 'MSE')
+                elsif ($res eq 'UNK' || $res eq 'MSE' || $res eq 'AMP' || $res eq 'SO4' || $res eq 'DIO' || $res eq '1PE' 
+						|| $res eq 'ADP' || $res eq 'ALF' || $res eq 'GOL' || $res eq 'ANP' || $res eq 'M2M' || $res eq 'EDO' 
+						|| $res eq 'IPH' || $res eq 'IPA' || $res eq 'ACT' || $res eq 'UNX' || $res eq 'SAH' || $res eq 'TRS'
+						|| $res eq 'CME' || $res eq 'PO4' || $res eq 'BEF')
                 {
-                    return 0;
+					warn "unknown amino acid: $res\n";
+					next;
+                    #return 0;
                 }
                 else
                 {
@@ -178,11 +195,15 @@ sub getPrimarySeq
 					elsif ($b eq '5BU' || three2one($b) ne '')
 					{
 						#some weired stuff
-						return 0;
+						#return 0;
+						warn "some weird stuff: $b\n";
+						next;
 					}
 					else
 					{
-                    	Carp::croak "unknown nucleotide: $b in ", Dumper (\@seq), "\n";
+						warn "unknown nucleotide: $b\n";
+						next;
+                    	#Carp::croak "unknown nucleotide: $b in ", Dumper (\@seq), "\n";
 					}
                 }
 	
@@ -190,9 +211,11 @@ sub getPrimarySeq
                 {
                     $seqStr .= $b;
                 }
-                elsif ($b eq 'N')
+                elsif ($b eq 'N' || $b eq 'K')
                 {
-                    return 0;
+					warn "unknown nucleotide: $b\n";
+                    next;
+                    #return 0;
                 }
                 else
                 {
@@ -203,6 +226,7 @@ sub getPrimarySeq
         }
         elsif ($seq[0] eq 'N')
         {
+			Carp::croak "unknown nucleotide: $seq[0]\n", Dumper (\@seq), "\n";
             return 0;
         }
         else
@@ -354,6 +378,8 @@ sub extractComplexInfo
 
 	#while ($compndStr=~m/MOL_ID: (\d+);\s+MOLECULE: (\S.*?);*\s*CHAIN: (\S.*?);/g)
 	#while ($compndStr=~m/MOL_ID: (\d+);\s+MOLECULE: (\S.*?);*\s*CHAIN: (\w{1,2}[;|\,\s.*?;])/g)
+	#print $compndStr, "\n";
+
 	while ($compndStr=~m/MOL_ID: (\d+);\s+MOLECULE:\s+(\S.*?);*\s*CHAIN: (\w{1,2}(?:\s*\,\s*\w{1,2}){0,})\,?;/g)
 	{
 		my ($id, $desc, $chainId) = ($1, $2, $3);

@@ -109,6 +109,10 @@ sub readBedFile
 		{
 			open ($fin, "gunzip -c $inBedFile | ")||Carp::croak "cannot open file $inBedFile to read\n";
 		}
+		elsif ($inBedFile =~/\.bz2$/)
+        {
+            open ($fin, "bunzip2 -c $inBedFile | ")||Carp::croak "cannot open file $inBedFile to read\n";
+        }
 		else
 		{
 			open ($fin, "<$inBedFile")||Carp::croak "cannot open file $inBedFile to read\n";
@@ -477,6 +481,10 @@ sub splitBedFileByChrom
 		if ($inBedFile =~/\.gz$/)
 		{
 			open ($fin, "gunzip -c $inBedFile |") || Carp::croak "can not open file $inBedFile to read\n";
+		}
+		elsif ($inBedFile =~/\.bz2$/)
+		{
+			open ($fin, "bunzip2 -c $inBedFile |") || Carp::croak "can not open file $inBedFile to read\n";
 		}
 		else
 		{

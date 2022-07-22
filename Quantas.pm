@@ -57,7 +57,7 @@ readConfigFile - obsolete now
 
 sub readConfigFile
 {
-    my ($configFile, $base, $type) = @_;
+    my ($configFile, $base, $type, $suffix) = @_;
     my $fin;
     open ($fin, "<$configFile") || Carp::croak "cannot open file $configFile to read\n";
     my $i = 0;
@@ -69,6 +69,8 @@ sub readConfigFile
         next if $line=~/^\s*$/;
         next if $line=~/^\#/;
         my ($sampleName, $groupName) = split (/\t/, $line);
+		$sampleName .= $suffix if $suffix;
+
         $groups{$groupName}->{"id"} = $i++ unless exists $groups{$groupName};
         push @{$groups{$groupName}->{"samples"}}, $sampleName;
 
@@ -150,7 +152,9 @@ sub readExprConfigFile
 
 sub readExprDataFile
 {
-    my ($inputFile) = @_;
+    my ($inputFile, $pseudoCount) = @_;
+
+	$pseudoCount = 1 unless defined $pseudoCount;
 
     my $fin;
     my @data;
@@ -179,7 +183,7 @@ sub readExprDataFile
         my $exonLen = $geneInfo[$i][2];
         my $tagNum = $data[$i][0];
 
-        $tagNum = 1 if $tagNum == 0;
+        $tagNum = $pseudoCount if $tagNum < $pseudoCount;
         $data[$i][1] = $tagNum * 1e9 / $exonLen / $totalTagNum;
     }
 	
@@ -205,7 +209,7 @@ sub readASDataFile
         my @cols = split (/\t/, $line);
         my (@infoCols, @dataCols);
 
-        if ($type eq 'cass' || $type eq 'iret' || $type eq 'mutx' || $type eq 'taca')
+        if ($type eq 'cass' || $type eq 'iret' || $type eq 'mutx' || $type eq 'taca' | $type eq 'ss')
         {
             @infoCols = @cols[0..7];
             @dataCols = @cols[8..$#cols];

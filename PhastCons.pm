@@ -72,6 +72,10 @@ sub indexBigPhastConsFile
 	{
 		open ($fin, "gunzip -c $in | ") ||Carp::croak "cannot open file $in to read\n";
 	}
+	elsif ($in=~/\.bz2$/)
+    {
+        open ($fin, "bunzip2 -c $in | ") ||Carp::croak "cannot open file $in to read\n";
+    }
 	else
 	{
 		open ($fin, "<$in")|| Carp::croak "can not open file $in to read\n";

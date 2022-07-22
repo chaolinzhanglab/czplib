@@ -982,43 +982,82 @@ sub cnkln
 sub matrix2clusters
 {
 	my $matrix = $_[0];
-	my $n = @$matrix;
-	my @doneFlag;
+	
+	my $n = ref $matrix eq 'ARRAY' ? @$matrix : keys %$matrix;
 	my @clusters;
+	
+	my @doneFlag;
 	#indicate whether a vertex has been clustered
 	for (my $i = 0; $i < $n; $i++)
 	{
 		$doneFlag[$i] = 0;
 	}
 	
-	for (my $i = 0; $i < $n; $i++)
+	if (ref $matrix eq 'ARRAY')
 	{
-		next if $doneFlag[$i];
-
-		$doneFlag [$i] = 1;
-		my @vertices = ($i);
-		_addNeighbor ($matrix, \@doneFlag, $i, \@vertices);
-		push @clusters, \@vertices;
+		for (my $i = 0; $i < $n; $i++)
+		{
+			next if $doneFlag[$i];
+	
+			$doneFlag [$i] = 1;
+			my @vertices = ($i);
+			_addNeighbor ($matrix, \@doneFlag, $i, \@vertices);
+			push @clusters, \@vertices;
+		}
 	}
+	else
+	{
+		my @idx = sort keys %$matrix;
+		for (my $i = 0; $i < $n; $i++)
+        {
+            next if $doneFlag[$i];
+
+            $doneFlag [$i] = 1;
+			my $v = $idx[$i];
+            my @vertices = ($v);
+            _addNeighbor ($matrix, \@doneFlag, $v, \@vertices, \@idx);
+            push @clusters, \@vertices;
+        }
+	}
+
 	return \@clusters;
 }
 
 sub _addNeighbor 
 {
-	my ($matrix, $doneFlag, $i, $vertices) =@_;
-	my $n = @$matrix;
-	for (my $j = 0; $j < $n; $j++)
+	my ($matrix, $doneFlag, $i, $vertices, $idx) =@_;
+
+	if (ref $matrix eq 'ARRAY')
 	{
-		if ($doneFlag->[$j] == 0 && $matrix->[$i]->[$j] > 0 && $i != $j)
+		my $n = @$matrix;
+		for (my $j = 0; $j < $n; $j++)
 		{
-			$doneFlag->[$j] = 1;
-			push @$vertices, $j;
-			_addNeighbor ($matrix, $doneFlag, $j, $vertices);
+			if ($doneFlag->[$j] == 0 && $matrix->[$i]->[$j] > 0 && $i != $j)
+			{
+				$doneFlag->[$j] = 1;
+				push @$vertices, $j;
+				_addNeighbor ($matrix, $doneFlag, $j, $vertices);
+			}
 		}
 	}
+	else
+	{
+		my $n = @$idx;
+
+		my $v = $i;
+		for (my $j = 0; $j < $n; $j++)
+        {
+			my $v2 = $idx->[$j];
+			#print "v = $v, v2=$v2\n";
+            if ($doneFlag->[$j] == 0 && $v ne $v2 && exists $matrix->{$v}{$v2} && $matrix->{$v}{$v2} > 0)
+            {
+                $doneFlag->[$j] = 1;
+                push @$vertices, $v2;
+                _addNeighbor ($matrix, $doneFlag, $v2, $vertices, $idx);
+            }
+        }
+	}
 }
-
-
 
 
 

@@ -3,16 +3,13 @@
 package PXSXconfig;
 use strict;
 use Carp;
-use File::Basename;
 
-my $ESEhome=dirname($0);
-
+my $ESEhome = "/home/zhang/zhangc/src/ESE3/PXSX";
 sub getDB
 {
 	#print "getDB called ...\n";
 	my $dbName = $_[0];
-	my $inFile = "$ESEhome/DB/$dbName.dat";
-	open (FD, "<$inFile") || Carp::croak "can not open file $inFile to read\n";
+	open (FD, "<$ESEhome/DB/$dbName.dat") || Carp::croak "can not open file $dbName.dat to read\n";
 	Carp::croak ("unknown matrix database name $@\n") if ($@);
 	my $db;
 	$db->{"desc"} = <FD>;

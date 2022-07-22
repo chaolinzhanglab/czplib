@@ -464,9 +464,16 @@ sub nibFrag
 
 
 #base composition
+#seqs: one sequence or reference to an array of sequences
 sub baseComp
 {
 	my $seqs = $_[0];
+
+	my $tmp = ref $seqs;
+	if (ref $seqs eq '')
+	{
+		$seqs = [$seqs];
+	}
 	my ($a, $c, $g, $t) = (0, 0, 0, 0);
 	foreach my $seqStr (@$seqs)
 	{
@@ -491,6 +498,11 @@ sub baseComp
 sub baseCount
 {
 	my $seqs = $_[0];
+	
+	if (ref $seqs eq '')
+    {
+        $seqs = [$seqs];
+    }
 	my ($a, $c, $g, $t) = (0, 0, 0, 0);
 	foreach my $seqStr (@$seqs)
 	{

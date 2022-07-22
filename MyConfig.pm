@@ -69,7 +69,15 @@ sub getDefaultTmpDir
 sub getGenomeDir
 {
 	my $species =$_[0];
-	my $genomeDir = "/ifs/home/c2b2/cz_lab/czlab_data/genomes";
+	my $genomeDir = "/ifs/data/c2b2/cz_lab/genomes";
+	#cz: please do not change this default dir
+	
+	my $path = "$genomeDir/$species";
+	Carp::croak "can not find the directory for $species: $path\n" unless -d $path;
+	
+	return $path;
+
+=obsolete
 	return "$genomeDir/mm5"	if ($species eq 'mm5');
 	return "$genomeDir/mm6" if ($species eq 'mm6');
 	return "$genomeDir/mm8" if ($species eq 'mm8');
@@ -97,11 +105,13 @@ sub getGenomeDir
 	return "$genomeDir/galGal4" if ($species eq 'galGal4');
 	return "$genomeDir/danRer4" if ($species eq 'danRer4');
 	return "$genomeDir/xenTro3" if ($species eq 'xenTro3');
+	return "$genomeDir/dm6" if ($species eq 'dm6');
 	return "$genomeDir/dm2" if ($species eq 'dm2');
 	return "$genomeDir/ce2" if ($species eq 'ce2');
 	return "$genomeDir/sacCer1" if ($species eq 'sacCer1');
 	return "$genomeDir/danRer10" if ($species eq 'danRer10');
 	Carp::croak "can not find the directory for $species\n";
+=cut
 }
 
 1;

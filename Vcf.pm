@@ -83,6 +83,7 @@ sub readVcfFile
 	my ($inFile, $verbose, $msgio) = @_;
 
 	$msgio = *STDOUT unless $msgio;
+	my $validateFields = 0; #prefixed for now.
 
 	my $fin;
 	my @ret;
@@ -97,7 +98,7 @@ sub readVcfFile
 		print $msgio "$iter ...\n" if $verbose && $iter % 500000 == 0;
 		$iter++;
 
-		my $snv = lineToVcf ($line);
+		my $snv = lineToVcf ($line, $validateFields);
 		push @ret, $snv;
 	}	
 	close($fin);
@@ -163,6 +164,10 @@ sub splitVcfFileByChrom
 		{
 			open ($fin, "gunzip -c $inFile |") || Carp::croak "can not open file $inFile to read\n";
 		}
+		elsif ($inFile =~/\.bz2$/)
+        {
+            open ($fin, "bunzip2 -c $inFile |") || Carp::croak "can not open file $inFile to read\n";
+        }
 		else
 		{
 			open ($fin, "<$inFile") || Carp::croak "can not open file $inFile to read\n";
@@ -225,15 +230,16 @@ sub splitVcfFileByChrom
 
 Pass a line of Vcf file
 
-my $vcf = lineToVcf ($fin);
+my $vcf = lineToVcf ($line;
 
 =cut
 
 sub lineToVcf
 {
-	my $line = $_[0];
+	my ($line, $validateFields) = @_;
+
 	my ($chrom, $position, $id, $refBase, $altBase, $qual, $filter, $info, @ignored) = split ("\t", $line);
-	my $infoHash = parseVcfInfo ($info);
+	my $infoHash = parseVcfInfo ($info, $validateFields);
 
 	my %vcfHash = (chrom=>$chrom, position=>$position-1, id=>$id, refBase=>$refBase, altBase=>$altBase, qual=>$qual, filter=>$filter, info=>$infoHash);
 	return \%vcfHash;
@@ -243,7 +249,7 @@ sub lineToVcf
 sub vcfToLine
 {
 	my $vcf = $_[0];
-
+	my $validateInfoFields = 0;
 	my $infoStr = encodeVcfInfo ($vcf->{'info'});
 	return join ("\t", $vcf->{'chrom'}, $vcf->{'position'}+1, $vcf->{'id'}, $vcf->{'refBase'}, $vcf->{'altBase'}, $vcf->{'qual'}, $vcf->{'filter'}, $infoStr);
 }
@@ -251,7 +257,8 @@ sub vcfToLine
 
 sub parseVcfInfo
 {
-	my $infoStr = $_[0];
+	my ($infoStr, $validateFields) = @_;
+	
 	my %infoHash;
 	my @pairs = split (";", $infoStr);
 	foreach my $pair (@pairs)
@@ -270,7 +277,11 @@ sub parseVcfInfo
 			#not a pair
 			$infoHash{$pair} = 1;
 		}
-		Carp::croak "$name is not a valid VCF info field\n" unless exists $vcfInfoFieldHash{$name};
+
+		if (defined $validateFields && $validateFields == 1)
+		{
+			Carp::croak "$name is not a valid VCF info field\n" unless exists $vcfInfoFieldHash{$name};
+		}
 	}
 	return \%infoHash;
 }
@@ -279,12 +290,15 @@ sub parseVcfInfo
 
 sub encodeVcfInfo
 {
-	my $info = $_[0];
+	my ($info, $validateFields) = @_;
 	
-	#make sure every field is considered
-	foreach my $name (keys %$info)
+	if (defined $validateFields && $validateFields == 1)
 	{
-		Carp::croak "$name is not a valid VCF info field\n" unless exists $vcfInfoFieldHash{$name};
+		#make sure every field is considered
+		foreach my $name (keys %$info)
+		{
+			Carp::croak "$name is not a valid VCF info field\n" unless exists $vcfInfoFieldHash{$name};
+		}
 	}
 
 	my $ret = "";

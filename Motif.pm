@@ -19,7 +19,7 @@ package Motif;
 
 require Exporter;
 
-our $VERSION = 1.02;
+our $VERSION = 1.03;
 
 @ISA = qw (Exporter);
 
@@ -36,6 +36,7 @@ our $VERSION = 1.02;
 	getMinMatrixScore
 	maskWord
 	printMotif
+	readMEMEMotifFile
 	readMotifFile
 	readMatchFile
 	revComMatrix
@@ -87,6 +88,104 @@ sub _initMotif
 	};
 	return $motif;
 }
+
+
+#private
+sub readMEMEMotifFile
+{
+	my ($in) = @_;
+	my $prefix = "MEME";
+
+	my $fin;
+	open ($fin, "<$in") || Carp::croak "can not open file $in to read\n";
+	my $line;
+	my @motif = ();
+	my ($BEGIN, $SEQ, $HEAD, $MATRIX) = qw (bg sq hd st mt);
+	my $matrix = ();
+	my $sites = ();
+	my ($width, $nsites, $evalue) = (-1, -1, -1);
+	my $status = $BEGIN;
+	my $id = 0;
+	while ($line =<$fin>)
+	{
+		chomp $line;
+		next if $line=~/^\s*$/;
+		
+		#print $line, "\n";
+		if (($line =~/in BLOCKS format/) && $status eq $BEGIN)
+		{
+			#print "motif hits...\n";
+			$line = <$fin>;
+			$line = <$fin>;
+			while ($line =<$fin>)
+		   	{	if ($line!~/^\/\//)
+				{
+					chomp $line;
+					$line =~/^(.*?)\s+\(\s+(\d+)\)\s+(.*?)\s+(.*?)$/;
+					my $seq = $1;
+					my $pos = $2;
+					my $site = $3;
+					my $strand = ($4 == 1)?'p':'n';
+					push @$sites, {site=>$site, pos=>$pos, seq=>$seq, strand=>$strand};
+				}
+				else
+				{
+					$status = $SEQ;
+					last;
+				}
+			}
+			next;
+		}
+	
+		if ($line =~/position\-specific probability matrix/ && $status eq $SEQ)
+		{
+			$status = $HEAD;
+			next;
+		}
+
+		if ($line =~m@letter-probability matrix: alength= \d+ w= (\d+) nsites= (\d+) E= (.*?)$@ 
+				&& $status eq $HEAD)
+		{
+			$status = $MATRIX;
+			$width = $1;
+			$nsites = $2;
+			$evalue = $3;
+			next;
+		}
+		
+		if ($line !~/^\---/ && $status eq $MATRIX)
+		{
+			my @cols = split (/\s+/, $line);
+			shift @cols;
+			push @$matrix,
+			{A=>$cols[0], C=>$cols[1], G=>$cols[2], T=>$cols[3]};
+			next;
+		}
+		
+		if ($line =~/^---/ && $status eq $MATRIX)
+		{
+			my $motifWidth = @$matrix;
+			my $motifId = $prefix . "_W$motifWidth" . "_" . $id;
+	
+			$id++;
+			push @motif, {
+					ID=>$motifId,
+					AC=>$motifId,
+					attr=>{WIDTH=>$width, NSITES=>$nsites, EVALUE=>$evalue}, 
+					MT=>$matrix, 
+					BS=>$sites
+			};
+			$matrix = ();
+			$sites = ();
+			$width = $nsites = $evalue = -1;
+			$status = $BEGIN;
+		}
+	}
+	close ($fin);
+	return \@motif;
+}
+
+
 
 =head2 readMotifFile
 

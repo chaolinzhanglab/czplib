@@ -46,6 +46,7 @@ our $VERSION = 1.02;
 	writeFastaFile
 	writeFastaSeq
 	bedToSeq
+	AACount
 	locateStopCodon
 	isNMDTranscript
 );
@@ -494,7 +495,18 @@ sub baseComp
 	return {A=>$a, C=>$c, G=>$g, T=>$t, N=>$n};
 }
 
-#base composition
+
+=head2 baseCount
+
+Calculate nucleotide base counts
+
+my $ret = readBedFile ($seqs);
+
+$seqs : input sequence(s).  can be one sequence or an array of sequences
+return         : reference to an hash table
+
+=cut
+
 sub baseCount
 {
 	my $seqs = $_[0];
@@ -517,6 +529,42 @@ sub baseCount
 	}
 	my $n = $a + $c +$g + $t;
 	return {A=>$a, C=>$c, G=>$g, T=>$t, N=>$n};
+}
+
+
+=head2 AACount
+
+Calculate amino acid counts
+
+my $ret = readBedFile ($seqs);
+
+$seqs : input sequence(s).  can be one sequence or an array of sequences
+return         : reference to an hash table
+
+=cut
+
+
+sub AACount
+{
+    my $seqs = $_[0];
+
+	if (ref $seqs eq '')
+    {
+        $seqs = [$seqs];
+    }
+
+	my @AAList = qw (A R N D C E Q G H I L K M F P S T W Y V);
+
+    my %aa = map {$_=>0} @AAList;
+
+	foreach my $seqStr (@$seqs)
+	{
+		$seqStr = uc ($seqStr);
+    	my @str = split(//, $seqStr);
+    	map {$aa{$_}+=1} @str;
+	}
+
+    return \%aa;
 }
 
 

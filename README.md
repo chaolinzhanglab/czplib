@@ -8,7 +8,7 @@ The library is released under the GPL-3.0 license.
 ## Installation
 
 
-### Manual installation###
+### Manual installation
 
 - Download the czplib perl library files: https://github.com/chaolinzhanglab/czplib
 - Decompress and move to whatever directory you like (as an example, we use /usr/local/lib/)

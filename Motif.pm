@@ -19,7 +19,7 @@ package Motif;
 
 require Exporter;
 
-our $VERSION = 1.03;
+our $VERSION = 1.04;
 
 @ISA = qw (Exporter);
 
@@ -30,6 +30,7 @@ our $VERSION = 1.03;
 	countToBayesianMatrix
 	countToFrequencyMatrix
 	countToStormoMatrix
+	frequencyToScoringMatrix
 	getMatrix
 	getMatrixScore
 	getMaxMatrixScore
@@ -696,6 +697,25 @@ sub countToBayesianMatrix
 	}
 }
 
+=head2 frequencyToScoringMatrix
+
+=cut
+
+sub frequencyToScoringMatrix
+{
+    my ($matrix, $baseComp) = @_;
+
+    my @scoringMatrix;
+    my $width = @$matrix;
+
+	my @bases = ('A', 'C', 'G', 'T');
+    for (my $p = 0; $p < $width; $p++)
+    {
+        map {$scoringMatrix[$p]{$_} = log ($matrix->[$p]{$_} / $baseComp->{$_}) / log (2)} @bases;
+    }
+    return \@scoringMatrix;
+}
+
 
 =head2 revComMatrix
 
@@ -797,6 +817,7 @@ sub getMatrixScore
 	}
 	return $score;
 }
+
 
 
 #handle pattern-based motifs

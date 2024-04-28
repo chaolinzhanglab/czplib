@@ -70,6 +70,8 @@ sub getGenomeDir
 {
 	my $species =$_[0];
 	my $genomeDir = "/ifs/data/c2b2/cz_lab/genomes";
+	$genomeDir = $ENV{'DATADIR'} . "/genomes" unless -d $genomeDir;
+
 	#cz: please do not change this default dir
 	
 	my $path = "$genomeDir/$species";

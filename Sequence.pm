@@ -228,7 +228,7 @@ sub writeFastaSeq
 count the number of all n-mer in one or more DNA/RNA sequences (case insensitive, i.e. sequeuence will be converted into upper case)
 
 my $wordHash = wordcount ($seqStr, $wordSize)
-my $wordHash = wordcount ($seqStr, $wordSize, {wordHash=>$oldWordHash)
+my $wordHash = wordcount ($seqStr, $wordSize, {wordHash=>$oldWordHash})
 my $wordHash = wordcount ($inFastaFile, $wordSize, {fasta=>1})
 
 =cut

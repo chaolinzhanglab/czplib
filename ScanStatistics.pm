@@ -10,6 +10,7 @@
 #      COMPANY:  Rockefeller University
 #      VERSION:  1.0
 #      CREATED:  10/21/2010
+#	   UPDATED:  03/19/2025
 #     REVISION:  ---
 #===============================================================================
 
@@ -49,6 +50,7 @@ $N: number of nonoverlapping window
 
 use strict;
 use warnings;
+use Math::BigFloat;
 
 
 #dictionary stores some intermediate results to save time
@@ -61,16 +63,27 @@ my %dictionary;
 #  N_g = L_g / w is the number of nonoverlapping window
 #
 
+# Updated 03/19/2025
 sub calcScanStatistic 
 {
-	my ($k, $phi, $N) = @_;
+    my ($k, $phi, $N) = @_;
 
-	my $p = 1 - Q2($k, $phi) * (Q3 ($k, $phi) / Q2($k, $phi))** ($N - 2);
-	$p = 0 if $p < 0; #rounding error when p is really small
-	%dictionary = ();
+    my $Q2 = Q2($k, $phi);
+    my $Q3 = Q3($k, $phi);
 
-	return $p;
+    return 0 if $Q2 <= 0 || $Q3 <= 0;
+
+	# Using Math::BigFloat to compute exponent
+	my $ratio = Math::BigFloat->new($Q3 / $Q2);
+	my $exponent = ($N - 2) * $ratio->blog;
+	my $p = 1 - $Q2 * $exponent->bexp;	
+	#print "ratio=$ratio exponent=$exponent p=$p\n";
+    $p = 0 if $p < 0;  
+    %dictionary = ();
+
+    return $p;
 }
+
 
 sub Q2
 {

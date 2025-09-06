@@ -21,3 +21,6 @@ Add the library path to the environment variable, so perl can find it.
     `export PERL5LIB=/usr/local/lib/czplib`
 
 
+### Through Anaconda
+From within your conda environment run the below command:
+conda install --yes chaolinzhanglab::czplib
